@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const dotenv = require('dotenv');
 const { Server } = require('socket.io');
@@ -587,7 +588,13 @@ function currentMonth() {
 }
 
 // Serve client build (production)
-const clientDist = path.join(__dirname, '..', 'client', 'dist');
+// Vercel-də yalnız server/ qovluğu deploy olunur — ona görə build
+// server/public-ə kopyalanır (npm run build:deploy). Lokal işləyəndə
+// client/dist varsa o istifadə olunur.
+const publicDir = path.join(__dirname, 'public');
+const clientDist = fs.existsSync(publicDir)
+  ? publicDir
+  : path.join(__dirname, '..', 'client', 'dist');
 app.use(express.static(clientDist, {
   etag: true,
   lastModified: true,

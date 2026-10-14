@@ -36,27 +36,34 @@ Vercel funksiyalarının IP-si dəyişkendir, ona görə siyahıya əlavə etmə
 
 Kodu GitHub-a push edin (və ya `vercel` CLI ilə yükləyin).
 
-Layihə kökündə `vercel.json` var:
+Layihə **yalnız `server/` qovluğu** yüklənir (Root Directory = `server`).
+Frontend build Vercel-də deyil, **kompüterdə** hazırlanır:
+
+```powershell
+npm run build:deploy      # client qurulur + server/public-ə kopyalanır
+```
+
+`server/vercel.json`:
 
 ```json
 {
-  "buildCommand": "npm run vercel:build",
-  "installCommand": "npm install",
-  "outputDirectory": "client/dist",
+  "outputDirectory": "public",
   "functions": { "api/[...path].js": { "maxDuration": 30 } },
   "rewrites": [{ "source": "/:path((?!api/).*)", "destination": "/index.html" }]
 }
 ```
 
-- Frontend Vercel-da qurulur (`npm run vercel:build` → `client/dist`).
-- `/api/*` sorğuları `api/[...path].js` serverless funksiyasına gedir
-  (funksiya `server/index.js` Express app-ini çağırır).
-- Qalan bütün yollar SPA `index.html`-ə yönləndirilir.
+- Statik fayllar `server/public`-dən (Vercel CDN)
+- `/api/*` → `server/api/[...path].js` → `server/index.js` (Express)
+- SPA yolları → `index.html`
+
+> **Frontend dəyişdi?** `npm run build:deploy` işlədin, sonra yenidən deploy edin.
 
 Köhnə `builds`/`routes` formatı (Vercel legacy) işləmir — kök səhifə JS faylının
 mətni göstərirdi və `/api/*` 404 verirdi. İndi yalnız bu struktur istifadə olunur.
 
-`.vercelignore` `node_modules`, `mobile`, `server/.env` fayllarını yükləməyi bloklayır.
+`.vercelignore` `node_modules`, `mobile`, `server/.env` fayllarını yükləməyi bloklayır
+(`server/public` isə yüklənir).
 
 **Frontend API ünvanı:** `client/.env.production` faylında
 ```

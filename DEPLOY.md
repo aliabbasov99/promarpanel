@@ -47,11 +47,15 @@ npm run build:deploy      # client qurulur + server/public-ə kopyalanır
 
 ```json
 {
+  "framework": null,
   "outputDirectory": "public",
   "functions": { "api/[...path].js": { "maxDuration": 30 } },
   "rewrites": [{ "source": "/:path((?!api/).*)", "destination": "/index.html" }]
 }
 ```
+
+> `"framework": null` vacibdir — onsuz Vercel layihəni framework sanır və
+> `No entrypoint found in output directory: "public"` xətası verir.
 
 - Statik fayllar `server/public`-dən (Vercel CDN)
 - `/api/*` → `server/api/[...path].js` → `server/index.js` (Express)

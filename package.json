@@ -12,11 +12,23 @@
     "mobile:android": "npm run android --prefix mobile",
     "mobile:ios": "npm run ios --prefix mobile",
     "build": "npm run build --prefix client",
+    "vercel:build": "npm install --prefix client && npm run build --prefix client",
     "start": "npm start --prefix server",
     "seed-users": "npm run seed-users --prefix server",
     "seed": "npm run seed --prefix server"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.7",
+    "expo-server-sdk": "^7.2.0",
+    "express": "^5.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.11.2",
+    "socket.io": "^4.8.4",
+    "web-push": "^3.6.7"
   }
 }

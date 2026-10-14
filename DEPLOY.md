@@ -40,21 +40,21 @@ Layihə kökündə `vercel.json` var:
 
 ```json
 {
-  "builds": [
-    { "src": "client/package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } },
-    { "src": "server/index.js", "use": "@vercel/node" }
-  ],
-  "routes": [
-    { "handle": "filesystem" },
-    { "src": "/((?!api/).*)", "dest": "/index.html" },
-    { "src": "/(.*)", "dest": "server/index.js" }
-  ]
+  "buildCommand": "npm run vercel:build",
+  "installCommand": "npm install",
+  "outputDirectory": "client/dist",
+  "functions": { "api/[...path].js": { "maxDuration": 30 } },
+  "rewrites": [{ "source": "/:path((?!api/).*)", "destination": "/index.html" }]
 }
 ```
 
-- Frontend Vercel-da qurulur (`npm run build` → `client/dist`).
-- `/api/*` sorğuları `server/index.js` funksiyasına gedir.
-- Qalan hər şey SPA `index.html`-ə yönləndirilir.
+- Frontend Vercel-da qurulur (`npm run vercel:build` → `client/dist`).
+- `/api/*` sorğuları `api/[...path].js` serverless funksiyasına gedir
+  (funksiya `server/index.js` Express app-ini çağırır).
+- Qalan bütün yollar SPA `index.html`-ə yönləndirilir.
+
+Köhnə `builds`/`routes` formatı (Vercel legacy) işləmir — kök səhifə JS faylının
+mətni göstərirdi və `/api/*` 404 verirdi. İndi yalnız bu struktur istifadə olunur.
 
 `.vercelignore` `node_modules`, `mobile`, `server/.env` fayllarını yükləməyi bloklayır.
 

@@ -6,6 +6,7 @@ import Modal from '../components/Modal';
 import { LuPlus, LuPencil, LuTrash2, LuPower, LuTags, LuMapPin, LuEye, LuEyeOff, LuUser, LuX } from 'react-icons/lu';
 import { FaWhatsapp } from 'react-icons/fa';
 import { useAuth } from '../auth';
+import { useLiveRefresh } from '../useLiveRefresh';
 
 // Əlaqə siyahısını "Ad — nömrə" satırlarına çevirir
 export function contactRows(s) {
@@ -62,6 +63,9 @@ export default function Stores() {
     }
   };
   useEffect(() => { load(); }, []);
+
+  // Serverless rejimdə ehtiyat yeniləmə
+  useLiveRefresh(load);
 
   const visible = stores.filter((s) => {
     if (!showInactive && !s.active) return false;

@@ -3,6 +3,11 @@ import { getClientId } from './identity';
 
 const BASE = '/api';
 
+// Vercel və s.: frontend Vercel-də, backend başqa yerdədir.
+// VITE_API_URL = https://api.sizin-domain.az  (dev-də boş buraxılır — Vite proxy işləyir)
+const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const SOCKET_ORIGIN = API_ORIGIN || undefined;
+
 let token = localStorage.getItem('promar.token') || null;
 
 export function setToken(t) {
@@ -17,7 +22,7 @@ export function getToken() {
 
 async function request(path, options = {}) {
   const t = getToken();
-  const res = await fetch(BASE + path, {
+  const res = await fetch(API_ORIGIN + BASE + path, {
     headers: {
       'Content-Type': 'application/json',
       'x-client-id': getClientId(),
@@ -38,10 +43,15 @@ async function request(path, options = {}) {
 }
 
 // Real-vaxt bildirişlər
-export const socket = io({
+export const socket = io(SOCKET_ORIGIN, {
   path: '/socket.io',
   auth: { clientId: getClientId() },
   autoConnect: true,
+  // Serverless (Vercel) mühitdə WebSocket yoxdur — tekrarları kəsmək üçün
+  reconnectionDelay: 3000,
+  reconnectionDelayMax: 30000,
+  reconnectionAttempts: 5,
+  timeout: 8000,
 });
 
 export const api = {
@@ -74,6 +84,8 @@ export const api = {
   deleteIssue: (id) => request(`/issues/${id}`, { method: 'DELETE' }),
 
   getStats: (month) => request(`/stats?month=${month}`),
+  // Serverless (Vercel) rejimdə WebSocket yoxdur — bildirişlər bu sorğu ilə gəlir
+  getEvents: (since) => request(`/events?since=${encodeURIComponent(since)}`),
 
   unsubscribePush: () => request('/push/web', { method: 'DELETE' }),
   registerMobilePush: (token, platform) =>

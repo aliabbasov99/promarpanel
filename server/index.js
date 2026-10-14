@@ -14,6 +14,7 @@ const Issue = require('./models/Issue');
 const User = require('./models/User');
 const WebPush = require('./models/WebPush');
 const MobilePush = require('./models/MobilePush');
+const Event = require('./models/Event');
 
 // Push modulları isteğe bağlıdır — yüklənməsə server yenə də işləyir
 let push = { sendToEveryone: async () => {}, isConfigured: () => false, PUBLIC_KEY: null };
@@ -80,7 +81,34 @@ function broadcast(event, payload, originClientId, originUserId) {
       originUserId
     )
     .catch(() => {});
+
+  // Serverless rejimdə (Vercel) WebSocket yoxdur — hadisələr DB-dən oxunur
+  useEffect(() => {
+    Event.create({
+      event,
+      title: payload.title,
+      message: payload.message,
+      pushTitle: payload.pushTitle,
+      pushBody: payload.pushBody,
+      data: { ...payload },
+      actorRole: payload.by || payload.actorRole,
+      actor: originUserId,
+    }).catch(() => {});
 }
+
+// Yeni hadisələr ( polling: ?since=ISO tarix)
+app.get('/api/events', auth, async (req, res) => {
+  const since = req.query.since ? new Date(req.query.since) : new Date(Date.now() - 60 * 60 * 1000);
+  if (Number.isNaN(since.getTime())) return res.status(400).json({ error: 'Yanlış tarix' });
+
+  const rows = await Event.find({ at: { $gt: since } })
+    .sort({ at: 1 })
+    .limit(50)
+    .lean();
+
+  // Öz yaratdığı hadisəni özü görmür
+  res.json(rows.filter((r) => String(r.actor || '') !== String(req.user._id)));
+});
 
 function onlineCount() {
   if (!io) return 0;
@@ -573,17 +601,20 @@ app.use(express.static(clientDist, {
     }
   },
 }));
-// SPA fallback
-app.get(/^(?!\/api).*/, (req, res) => {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.sendFile(path.join(clientDist, 'index.html'));
-});
-
-const PORT = process.env.PORT || 5000;
-
 // Serverless mühit (Vercel, Netlify Functions): daimi proses yoxdur,
 // WebSocket də işləmər — funksiya yalnız HTTP sorğularını cavablandırır.
 const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+// SPA fallback
+app.get(/^(?!\/api).*/, (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  // Vercel-də statik fayllar CDN tərəfindən verilir (routes: /->index.html),
+  // funksiya yalnız //api sorğularına baxır
+  if (IS_SERVERLESS) return res.status(404).json({ error: 'Not found' });
+  return res.sendFile(path.join(clientDist, 'index.html'));
+});
+
+const PORT = process.env.PORT || 5000;
 
 mongoose
   .connect(process.env.MONGO_URI)

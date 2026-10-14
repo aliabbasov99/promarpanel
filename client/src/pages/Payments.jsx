@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { api } from '../api';
 import { currentMonth, monthLabel, formatDate, formatMoney } from '../utils';
 import Modal from '../components/Modal';
 import { ContactList } from './Stores';
 import { LuCheck, LuClock, LuTriangleAlert, LuEye, LuRotateCcw, LuMapPin } from 'react-icons/lu';
 import { useAuth } from '../auth';
+import { useLiveRefresh } from '../useLiveRefresh';
 
 const STATUS = {
   paid: { label: 'Ödənilib', cls: 'paid', icon: LuCheck },
@@ -33,6 +34,9 @@ export default function Payments() {
   };
 
   useEffect(() => { load(month, showInactive); }, [month, showInactive]);
+
+  // Serverless rejimdə (WebSocket yoxdur) ehtiyat yeniləmə
+  useLiveRefresh(useCallback(() => load(month, showInactive), [month, showInactive]));
 
   const months = useMemo(() => {
     const now = new Date();

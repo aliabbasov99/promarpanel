@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { socket } from './api';
+import { socket, api } from './api';
 
 const NotifyContext = createContext(null);
 export const useNotify = () => useContext(NotifyContext);
@@ -17,6 +17,14 @@ export function NotifyProvider({ children }) {
   const [online, setOnline] = useState(1);
   const [unread, setUnread] = useState(0);
   const [enabled, setEnabled] = useState(() => localStorage.getItem(KEY_NOTIF) !== 'off');
+  // WebSocket varmı? (Vercel serverless-də yoxdur — o halda ehtiyat yeniləmə işə düşür)
+  const [live, setLive] = useState(() => socket.connected);
+
+  // Socket qopanda heç nə baş vermir — aşağıdakı polling işə düşür
+  useEffect(() => {
+    if (live) return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live]);
 
   // Parametrlər səhifəsindən aç/bağla dəyişikliyi
   useEffect(() => {
@@ -47,6 +55,8 @@ export function NotifyProvider({ children }) {
 
   useEffect(() => {
     socket.on('presence', (p) => setOnline(p.online));
+    socket.on('connect', () => setLive(true));
+    socket.on('disconnect', () => setLive(false));
 
     socket.on('issue:created', (d) => {
       push({
@@ -86,6 +96,50 @@ export function NotifyProvider({ children }) {
     };
   }, [push]);
 
+  // ---- Serverless rejim (Vercel): WebSocket yoxdur, 25 saniyədə bir yoxlayır ----
+  useEffect(() => {
+    if (live) return undefined;
+
+    let since = new Date().toISOString();
+    let busy = false;
+
+    const poll = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const rows = await api.getEvents(since);
+        rows.forEach((r) => {
+          const d = r.data || {};
+          push({
+            id: 'ev-' + r._id,
+            kind:
+              r.event === 'issue:created'
+                ? 'created'
+                : r.event === 'issue:deleted'
+                  ? 'deleted'
+                  : d.archived
+                    ? 'archived'
+                    : 'status',
+            title: d.title ? `${d.by || r.actorRole} - "${d.title}"` : d.by || 'PROMAR',
+            body: d.message ? `${d.message} · ${d.store || ''}`.replace(/ · $/, '') : '',
+            at: r.at,
+          });
+        });
+        if (rows.length) since = rows[rows.length - 1].at;
+        // Səhifələr öz məlumatını yeniləsin
+        window.dispatchEvent(new Event('promar:refresh'));
+      } catch {
+        /* şəbəkə yoxdur — növbəti cəhdda yenidən */
+      } finally {
+        busy = false;
+      }
+    };
+
+    poll();
+    const timer = setInterval(poll, 25000);
+    return () => clearInterval(timer);
+  }, [live, push]);
+
   const clear = () => { setItems([]); setUnread(0); };
   const markRead = () => setUnread(0);
 
@@ -93,7 +147,7 @@ export function NotifyProvider({ children }) {
     <NotifyContext.Provider
       value={{
         items, unread, online, clear, markRead,
-        enabled, toggle, statusLabel: STATUS_LABEL,
+        enabled, toggle, live, statusLabel: STATUS_LABEL,
       }}
     >
       {children}

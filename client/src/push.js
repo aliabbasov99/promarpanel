@@ -4,8 +4,10 @@ const VAPID_HELP =
   'Push yalnız HTTPS və ya localhost-da işləyir. Bu halda http://IP ünvanı ilə açmısınız.';
 
 // VAPID açarını server-dən alır
+const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+
 async function getPublicKey() {
-  const res = await fetch('/api/push/config');
+  const res = await fetch(`${API_ORIGIN}/api/push/config`);
   const data = await res.json();
   return data.publicKey;
 }
@@ -55,7 +57,7 @@ export async function enablePush() {
     });
 
   const token = await getToken();
-  await fetch('/api/push/web', {
+  await fetch(`${API_ORIGIN}/api/push/web`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

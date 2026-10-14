@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { currentMonth, monthLabel, formatMoney } from '../utils';
 import { LuCheck, LuClock, LuTriangleAlert, LuStore, LuTriangleAlert as LuBug, LuArrowRight, LuMapPin } from 'react-icons/lu';
 import { useAuth } from '../auth';
+import { useLiveRefresh } from '../useLiveRefresh';
 
 export default function Dashboard() {
   const { isAdmin } = useAuth();
@@ -30,6 +31,15 @@ export default function Dashboard() {
       }
     })();
   }, [month]);
+
+  // Serverless rejimdə (WebSocket yoxdur) ehtiyat yeniləmə
+  useLiveRefresh(
+    useCallback(() => {
+      api.getStats(month).then(setStats).catch(() => {});
+      api.getPayments(month).then((d) => setRows(d.rows)).catch(() => {});
+      api.getIssues('?status=open').then((i) => setOpenIssues(i.slice(0, 6))).catch(() => {});
+    }, [month])
+  );
 
   if (error) return <div className="error-box">Xəta: {error}</div>;
   if (!stats) return <div className="loading">Yüklənir…</div>;

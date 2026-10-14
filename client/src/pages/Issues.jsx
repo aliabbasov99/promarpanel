@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api';
 import { formatDate } from '../utils';
 import Modal from '../components/Modal';
 import { ContactList } from './Stores';
 import { LuPlus, LuTrash2, LuSearch, LuArchive, LuUndo2 } from 'react-icons/lu';
+import { useLiveRefresh } from '../useLiveRefresh';
 
 const STATUS = { open: 'Açıq', in_progress: 'İşlənir', resolved: 'Həll olundu' };
 const PRIORITY = { high: 'Yüksək', medium: 'Orta', low: 'Aşağı' };
@@ -28,19 +29,28 @@ export default function Issues() {
     }
   };
 
+  const reload = () =>
+    load({
+      status: view === 'archive' ? 'resolved' : '',
+      store: storeFilter,
+      excludeResolved: view === 'active',
+    });
+
   useEffect(() => {
     // Arxivdə yalnız həll olunmuşlar; əsas siyahıda həll olunmuşlar yoxdur
-    load({ status: view === 'archive' ? 'resolved' : '', store: storeFilter, excludeResolved: view === 'active' });
+    reload();
     api.getStoreOptions().then(setStores).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, storeFilter]);
+
+  // Serverless rejimdə ehtiyat yeniləmə
+  useLiveRefresh(reload);
 
   const visible = issues.filter((i) =>
     !q ||
     i.title.toLowerCase().includes(q.toLowerCase()) ||
     (i.store?.name || '').toLowerCase().includes(q.toLowerCase())
   );
-
-  const reload = () => load({ status: view === 'archive' ? 'resolved' : '', store: storeFilter, excludeResolved: view === 'active' });
 
   return (
     <>

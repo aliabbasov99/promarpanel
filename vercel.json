@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run vercel:build",
+  "buildCommand": "npm install --prefix client && npm run build --prefix client",
   "installCommand": "npm install",
   "outputDirectory": "client/dist",
   "functions": {

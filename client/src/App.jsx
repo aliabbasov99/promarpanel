@@ -15,9 +15,13 @@ import Settings from './pages/Settings';
 import { NotifyProvider } from './notify';
 import { Toasts } from './components/Notify';
 import { initTheme } from './theme';
+import { initPWA } from './pwa';
+import { registerSW } from './push';
 import { AuthProvider, useAuth } from './auth';
 
 initTheme();
+initPWA();
+registerSW(); // Service Worker (PWA quraşdırma + push bildirişləri)
 
 const LINKS = [
   { to: '/', label: 'İdarəetmə', icon: LuLayoutDashboard, end: true, admin: false },

@@ -83,17 +83,16 @@ function broadcast(event, payload, originClientId, originUserId) {
     .catch(() => {});
 
   // Serverless rejimdə (Vercel) WebSocket yoxdur — hadisələr DB-dən oxunur
-  useEffect(() => {
-    Event.create({
-      event,
-      title: payload.title,
-      message: payload.message,
-      pushTitle: payload.pushTitle,
-      pushBody: payload.pushBody,
-      data: { ...payload },
-      actorRole: payload.by || payload.actorRole,
-      actor: originUserId,
-    }).catch(() => {});
+  Event.create({
+    event,
+    title: payload.title,
+    message: payload.message,
+    pushTitle: payload.pushTitle,
+    pushBody: payload.pushBody,
+    data: { ...payload },
+    actorRole: payload.by || payload.actorRole,
+    actor: originUserId,
+  }).catch(() => {});
 }
 
 // Yeni hadisələr ( polling: ?since=ISO tarix)

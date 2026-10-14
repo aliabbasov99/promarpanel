@@ -20,12 +20,6 @@ export function NotifyProvider({ children }) {
   // WebSocket varmı? (Vercel serverless-də yoxdur — o halda ehtiyat yeniləmə işə düşür)
   const [live, setLive] = useState(() => socket.connected);
 
-  // Socket qopanda heç nə baş vermir — aşağıdakı polling işə düşür
-  useEffect(() => {
-    if (live) return undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live]);
-
   // Parametrlər səhifəsindən aç/bağla dəyişikliyi
   useEffect(() => {
     const onToggle = (e) => setEnabled(e.detail !== false);

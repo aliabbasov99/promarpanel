@@ -14,8 +14,20 @@ const Issue = require('./models/Issue');
 const User = require('./models/User');
 const WebPush = require('./models/WebPush');
 const MobilePush = require('./models/MobilePush');
-const push = require('./push');
-const mobilePush = require('./mobilePush');
+
+// Push modulları isteğe bağlıdır — yüklənməsə server yenə də işləyir
+let push = { sendToEveryone: async () => {}, isConfigured: () => false, PUBLIC_KEY: null };
+let mobilePush = { sendToEveryone: async () => {}, isConfigured: () => false };
+try {
+  push = require('./push');
+} catch (e) {
+  console.warn('Web push yüklənmədi:', e.message);
+}
+try {
+  mobilePush = require('./mobilePush');
+} catch (e) {
+  console.warn('Mobil push yüklənmədi:', e.message);
+}
 const { computeStatus } = require('./models/Payment');
 const { auth, requireRole, sign } = require('./middleware/auth');
 
@@ -569,9 +581,18 @@ app.get(/^(?!\/api).*/, (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
+// Serverless mühit (Vercel, Netlify Functions): daimi proses yoxdur,
+// WebSocket də işləmər — funksiya yalnız HTTP sorğularını cavablandırır.
+const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
+    if (IS_SERVERLESS) {
+      console.log('Serverless rejim: HTTP işləyir, WebSocket yoxdur');
+      return;
+    }
+
     const httpServer = http.createServer(app);
 
     io = new Server(httpServer, {
@@ -599,5 +620,14 @@ mongoose
           '"Allow access from anywhere" (0.0.0.0/0) və ya hazırkı IP-ni əlavə edin.'
         : '';
     console.error('\nMongoDB bağlantı xətası:\n ', err.message, ipHint, '\n');
-    process.exit(1);
+    if (IS_SERVERLESS) {
+      // Serverless-da crash etmə: funksiya hər dəfə yenidən cəhd edəcək
+      console.error('Serverless: bağlantı olmadan davam edirik\n');
+    } else {
+      process.exit(1);
+    }
   });
+
+// Vercel və s. funksiya mühiti üçün Express app-i ixrac edirik
+module.exports = app;
+module.exports.app = app;

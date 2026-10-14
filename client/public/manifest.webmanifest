@@ -1,0 +1,46 @@
+{
+  "name": "PROMAR Dashboard",
+  "short_name": "PROMAR",
+  "description": "PROMAR Helpdesk — mağaza ödənişləri və problem izləmə",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#054f96",
+  "theme_color": "#054f96",
+  "lang": "az",
+  "icons": [
+    {
+      "src": "/favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ödənişlər",
+      "url": "/odenisler"
+    },
+    {
+      "name": "Problemlər",
+      "url": "/problemler"
+    },
+    {
+      "name": "Mağazalar",
+      "url": "/magazalar"
+    }
+  ]
+}

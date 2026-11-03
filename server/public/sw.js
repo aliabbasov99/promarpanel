@@ -27,9 +27,12 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         return res;
       })
-      .catch(() =>
-        caches.match(req).then((cached) => cached || caches.match('/index.html'))
-      )
+      .catch(async () => {
+        const cached = (await caches.match(req)) || (await caches.match('/index.html'));
+        // respondWith heç vaxt undefined qəbul etmir — Response yoxdursa
+        if (cached) return cached;
+        return new Response('Offline', { status: 503, statusText: 'Offline' });
+      })
   );
 });
 

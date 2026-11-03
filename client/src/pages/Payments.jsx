@@ -3,7 +3,9 @@ import { api } from '../api';
 import { currentMonth, monthLabel, formatDate, formatMoney } from '../utils';
 import Modal from '../components/Modal';
 import { ContactList } from './Stores';
-import { LuCheck, LuClock, LuTriangleAlert, LuEye, LuRotateCcw, LuMapPin } from 'react-icons/lu';
+import { LuCheck, LuClock, LuTriangleAlert, LuEye, LuRotateCcw, LuMapPin, LuFileSpreadsheet, LuChartColumn, LuCalendarRange } from 'react-icons/lu';
+import { exportPayments } from '../exportPayments';
+import { exportMonthlyReport, exportOverallReport } from '../exportReport';
 import { useAuth } from '../auth';
 import { useLiveRefresh } from '../useLiveRefresh';
 
@@ -54,6 +56,36 @@ export default function Payments() {
     return true;
   });
 
+  // ---- Hesabatlar (aylıq + ümumi 2022-dən) ----
+  const [repBusy, setRepBusy] = useState(false);
+  const [report, setReport] = useState(null);
+
+  const openReport = async () => {
+    setRepBusy(true);
+    try {
+      const data = await api.getReport(month, month);
+      setReport(data);
+      exportMonthlyReport(data, month);
+    } catch (e) {
+      alert('Hesabat yaradıla bilmədi: ' + e.message);
+    } finally {
+      setRepBusy(false);
+    }
+  };
+
+  const openOverall = async () => {
+    setRepBusy(true);
+    try {
+      const data = await api.getReport('2022-01', currentMonth());
+      setReport(data);
+      exportOverallReport(data);
+    } catch (e) {
+      alert('Hesabat yaradıla bilmədi: ' + e.message);
+    } finally {
+      setRepBusy(false);
+    }
+  };
+
   const totals = {
     paid: rows.filter((r) => r.status === 'paid').length,
     pending: rows.filter((r) => r.status === 'pending').length,
@@ -91,6 +123,63 @@ export default function Payments() {
 
       {error && <div className="error-box">Xəta: {error}</div>}
 
+      {/* Hesabat nəticəsi */}
+      {report && (
+        <div className="panel" style={{ marginBottom: 18 }}>
+          <div className="panel-head">
+            <h2>
+              Hesabat —{' '}
+              {report.singleMonth
+                ? monthLabel(report.to)
+                : `${monthLabel(report.from)} — ${monthLabel(report.to)}`}
+            </h2>
+            <button className="btn ghost sm" onClick={() => setReport(null)}>
+              Bağla
+            </button>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Mağaza</th>
+                  <th>Gözlənilən</th>
+                  <th>Toplanan</th>
+                  <th>Borc</th>
+                  <th>Gecikmiş ay</th>
+                  <th>Ödənilib</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.rows.map((s) => (
+                  <tr key={s._id}>
+                    <td>{s.name}</td>
+                    <td>{formatMoney(s.expected)}</td>
+                    <td>{formatMoney(s.collected)}</td>
+                    <td style={{ color: s.debt > 0 ? 'var(--danger)' : undefined, fontWeight: '600' }}>
+                      {formatMoney(s.debt)}
+                    </td>
+                    <td>
+                      <span className={`badge ${s.lateMonths > 0 ? 'overdue' : 'paid'}`}>
+                        {s.lateMonths}
+                      </span>
+                    </td>
+                    <td className="muted">{s.paidMonths}</td>
+                  </tr>
+                ))}
+                <tr style={{ fontWeight: '700' }}>
+                  <td>UMUMİ</td>
+                  <td>{formatMoney(report.totals.expected)}</td>
+                  <td>{formatMoney(report.totals.collected)}</td>
+                  <td style={{ color: 'var(--danger)' }}>{formatMoney(report.totals.debt)}</td>
+                  <td>{report.totals.lateMonths}</td>
+                  <td className="muted">{report.totals.stores} mağaza</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="stat-grid">
         <div className="stat-card success">
           <div className="label">Ödənilib</div>
@@ -125,6 +214,33 @@ export default function Payments() {
               <option value="pending">Gözlənilir</option>
               <option value="overdue">Gecikdirilmiş</option>
             </select>
+            <button
+              className="btn ghost"
+              onClick={() => exportPayments(rows, month, filter)}
+              disabled={visible.length === 0}
+              title="Seçilmiş statusdakı mağazaları Excel-ə ixrac et"
+            >
+              <LuFileSpreadsheet size={15} />
+              Excel
+            </button>
+            <button
+              className="btn ghost"
+              onClick={openReport}
+              disabled={!isAdmin || repBusy}
+              title="Bu ay üçün hesabat: gözlənilən, tutulan, borc, gecikmiş ay"
+            >
+              <LuChartColumn size={15} />
+              {repBusy ? 'Yüklənir…' : 'Aylıq hesabat'}
+            </button>
+            <button
+              className="btn ghost"
+              onClick={openOverall}
+              disabled={!isAdmin || repBusy}
+              title="2022-ci ildən bu günə qədər ümumi hesabat"
+            >
+              <LuCalendarRange size={15} />
+              Ümumi hesabat
+            </button>
           </div>
         </div>
 

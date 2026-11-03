@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "778517523762",
+    "project_id": "promarpanel",
+    "storage_bucket": "promarpanel.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:778517523762:android:b62d19ccbcae753d9f3b2b",
+        "android_client_info": {
+          "package_name": "az.promar.helpdesk"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCr1nxjdSi7QJ9H96cANQ8sOB4PNpxYWmo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

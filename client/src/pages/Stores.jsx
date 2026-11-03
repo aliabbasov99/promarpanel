@@ -73,6 +73,7 @@ export default function Stores() {
     const needle = q.toLowerCase();
     return (
       s.name.toLowerCase().includes(needle) ||
+      (s.serviceCode || '').toLowerCase().includes(needle) ||
       contactRows(s).some((c) =>
         (c.contactName || '').toLowerCase().includes(needle) || (c.phone || '').includes(needle)
       )
@@ -118,7 +119,7 @@ export default function Stores() {
                   <th>Xəritə</th>
                   <th>Əlaqə nömrələri</th>
                   {isAdmin && <th>Cari qiymət</th>}
-                  {isAdmin && <th>Qiymət tarixçəsi</th>}
+                  {isAdmin && <th>Servis kodu</th>}
                   <th>Status</th>
                   {isAdmin && <th>Əməliyyat</th>}
                 </tr>
@@ -143,15 +144,12 @@ export default function Stores() {
                     <td><ContactList store={s} /></td>
                     {isAdmin && <td className="nowrap">{formatMoney(latestPrice(s, currentMonth()))}</td>}
                     {isAdmin && (
-                    <td style={{ fontSize: 12 }}>
-                      {[...s.prices]
-                        .sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : -1))
-                        .map((p, idx) => (
-                          <div key={idx} className={p.effectiveFrom > currentMonth() ? '' : 'muted'}>
-                            {formatMoney(p.amount)} <span className="muted">· {monthLabel(p.effectiveFrom)}-dan</span>
-                          </div>
-                        ))}
-                      {!s.prices.length && <span className="muted">Təyin edilməyib</span>}
+                    <td>
+                      {s.serviceCode ? (
+                        <span className="code-pill" title="Servis kodu">{s.serviceCode}</span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
                     </td>
                     )}
                     <td>
@@ -302,16 +300,10 @@ function StoreModal({ store, onClose, onSaved }) {
         </div>
 
         {isNew && (
-          <>
-            <div className="field">
-              <label>Aylıq qiymət (AZN)</label>
-              <input type="number" step="0.01" value={f.amount} onChange={set('amount')} placeholder="120" />
-            </div>
-            <div className="field">
-              <label>Qiymətin tətbiq ayı</label>
-              <input type="month" value={f.effectiveFrom} onChange={set('effectiveFrom')} />
-            </div>
-          </>
+          <div className="field">
+            <label>Aylıq qiymət (AZN)</label>
+            <input type="number" step="0.01" value={f.amount} onChange={set('amount')} placeholder="120" />
+          </div>
         )}
         <div className="field" style={{ gridColumn: '1 / -1' }}>
           <label>Qeyd</label>
@@ -325,11 +317,6 @@ function StoreModal({ store, onClose, onSaved }) {
           </select>
         </div>
       </div>
-      {isNew && (
-        <p className="hint">
-          Qiymət sonradan dəyişdirilsə, köhnə ödənişlər öz qiyməti ilə qalır — yalnız sonrakı aylar yeni qiymətlə hesablanır.
-        </p>
-      )}
     </Modal>
   );
 }
@@ -367,10 +354,6 @@ function PriceModal({ store, onClose, onSaved }) {
         <div className="field">
           <label>Yeni aylıq qiymət (AZN)</label>
           <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Tətbiq ayı</label>
-          <input type="month" value={from} onChange={(e) => setFrom(e.target.value)} />
         </div>
       </div>
       <div style={{ marginTop: 18 }}>

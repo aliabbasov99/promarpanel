@@ -1,16 +1,18 @@
 {
-  "buildCommand": "npm install --prefix client && npm run build --prefix client",
-  "installCommand": "npm install",
-  "outputDirectory": "client/dist",
-  "functions": {
-    "api/[...path].js": {
-      "maxDuration": 30
-    }
-  },
-  "rewrites": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/:path((?!api/).*)",
-      "destination": "/index.html"
+      "src": "api/[...path].js",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["server/public/**"]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/api/[...path].js"
     }
   ]
 }

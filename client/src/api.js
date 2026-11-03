@@ -8,6 +8,10 @@ const BASE = '/api';
 const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 const SOCKET_ORIGIN = API_ORIGIN || undefined;
 
+// Vercel serverless mühitdə WebSocket işləmir (funksiya daimi deyil),
+// ona görə production-da socket qoşulmur — bildirişlər polling ilə gəlir.
+const SOCKET_ENABLED = import.meta.env.DEV;
+
 let token = localStorage.getItem('promar.token') || null;
 
 export function setToken(t) {
@@ -46,7 +50,7 @@ async function request(path, options = {}) {
 export const socket = io(SOCKET_ORIGIN, {
   path: '/socket.io',
   auth: { clientId: getClientId() },
-  autoConnect: true,
+  autoConnect: SOCKET_ENABLED,
   // Serverless (Vercel) mühitdə WebSocket yoxdur — tekrarları kəsmək üçün
   reconnectionDelay: 3000,
   reconnectionDelayMax: 30000,
@@ -84,6 +88,9 @@ export const api = {
   deleteIssue: (id) => request(`/issues/${id}`, { method: 'DELETE' }),
 
   getStats: (month) => request(`/stats?month=${month}`),
+  getCash: (month) => request(`/cash?month=${month}`),
+  addCash: (body) => request('/cash', { method: 'POST', body: JSON.stringify(body) }),
+  deleteCash: (id) => request(`/cash/${id}`, { method: 'DELETE' }),
   // Serverless (Vercel) rejimdə WebSocket yoxdur — bildirişlər bu sorğu ilə gəlir
   getEvents: (since) => request(`/events?since=${encodeURIComponent(since)}`),
 
@@ -91,4 +98,33 @@ export const api = {
   registerMobilePush: (token, platform) =>
     request('/push/mobile', { method: 'POST', body: JSON.stringify({ token, platform }) }),
   unregisterMobilePush: () => request('/push/mobile', { method: 'DELETE' }),
+
+  // OneSignal (web + mobil)
+  registerOneSignalPlayer: (playerId, platform) =>
+    request('/push/onesignal', { method: 'POST', body: JSON.stringify({ playerId, platform }) }),
+
+  // Firebase (FCM) — həm web, həm Android
+  getPushConfig: () => request('/push/config'),
+  registerFirebaseToken: (token) =>
+    request('/push/mobile', { method: 'POST', body: JSON.stringify({ token, platform: 'web' }) }),
+  deleteMobilePush: () => request('/push/mobile', { method: 'DELETE' }),
+
+  // Gecikmiş işarəsi
+  markLate: (storeId, month) =>
+    request(`/stores/${storeId}/late`, { method: 'POST', body: JSON.stringify({ month }) }),
+  clearLate: (storeId) => request(`/stores/${storeId}/late`, { method: 'DELETE' }),
+
+  // Hesabatlar
+  getReport: (from, to) => request(`/report?from=${from}&to=${to}`),
+
+  // Telegram (hesaba bağlı)
+  telegramStatus: () => request('/telegram/status'),
+  telegramLink: () => request('/telegram/link', { method: 'POST' }),
+  telegramUnlink: () => request('/telegram/unlink', { method: 'POST' }),
+  telegramTest: () => request('/telegram/test', { method: 'POST' }),
+
+  // İstifadəçilər (admin)
+  getUsers: () => request('/users'),
+  createUser: (body) => request('/users', { method: 'POST', body: JSON.stringify(body) }),
+  deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
 };

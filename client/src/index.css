@@ -203,7 +203,12 @@ button { font-family: inherit; cursor: pointer; }
   color: #fff;
 }
 
-.main { flex: 1; padding: 24px 28px; overflow-x: auto; }
+/* Səhifə özü sağa sürüşməsin — cədvəllər .table-scroll içində sürüşür */
+.main {
+  flex: 1; min-width: 0; padding: 24px 28px;
+  overflow-x: hidden; overflow-y: auto;
+}
+.main > * { max-width: 100%; min-width: 0; }
 
 .page-head {
   display: flex; justify-content: space-between; align-items: center;
@@ -233,7 +238,17 @@ button { font-family: inherit; cursor: pointer; }
 .panel {
   background: #fff; border-radius: 12px; overflow: hidden;
   box-shadow: 0 1px 3px rgba(5, 79, 150, 0.08);
+  max-width: 100%;
 }
+/* Geniş cədvəllər panel hüdudundan kənara çıxmasın — sağa sürüşsən */
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+.table-scroll > table { min-width: 680px; }
 .panel-head {
   padding: 14px 18px; border-bottom: 1px solid var(--border);
   display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -268,6 +283,28 @@ tbody tr:last-child td { border-bottom: none; }
 .badge.high { background: #fdecec; color: var(--danger); }
 .badge.medium { background: #fff4e0; color: var(--warning); }
 .badge.low { background: #eceff2; color: var(--muted); }
+.badge.in { background: #e6f6ee; color: var(--success); }
+.badge.out { background: #fdecec; color: var(--danger); }
+
+/* ---------- Kassa ---------- */
+.cash-amount.in { color: var(--success); font-weight: 700; }
+.cash-amount.out { color: var(--danger); font-weight: 700; }
+.right { text-align: right; }
+.small { font-size: 12px; }
+.icon-btn.danger:hover { background: #fdecec; color: var(--danger); }
+.cash-balance .value { color: var(--primary); }
+
+/* ---------- Servis kodu ---------- */
+.service-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.12em;
+}
+.code-pill {
+  display: inline-block; padding: 3px 9px; border-radius: 6px;
+  background: #eef3f8; color: var(--primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.14em;
+}
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -639,6 +676,21 @@ table.year-grid td { padding: 4px; height: 56px; vertical-align: middle; }
   .contact-edit-row .icon-btn { margin-left: auto; }
   .contact-row { white-space: normal; flex-wrap: wrap; }
   table.year-grid { min-width: 720px; }
+  /* Cədvəl kadrı: yalnız cədvəl sürüşür, səhifə deyil */
+  .table-scroll {
+    margin: 0 -12px; padding: 0 12px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .table-scroll > table { min-width: 620px; }
+  .table-scroll::after {
+    content: '↔ sürüşdürün';
+    display: block; padding: 6px 2px 10px;
+    font-size: 11px; color: var(--muted); text-align: right;
+  }
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .toolbar { flex-wrap: wrap; }
+  .page-head, .panel-head, .settings-row { min-width: 0; }
   table.year-grid .year-label { width: 50px; font-size: 11px; }
   table.year-grid td { height: 50px; padding: 3px; }
   table.year-grid .cell { height: 42px; font-size: 10px; }

@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const dotenv = require('dotenv');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 
 dotenv.config();
@@ -15,7 +16,9 @@ const Issue = require('./models/Issue');
 const User = require('./models/User');
 const WebPush = require('./models/WebPush');
 const MobilePush = require('./models/MobilePush');
+const Setting = require('./models/Setting');
 const Event = require('./models/Event');
+const CashEntry = require('./models/CashEntry');
 
 // Push modulları isteğe bağlıdır — yüklənməsə server yenə də işləyir
 let push = { sendToEveryone: async () => {}, isConfigured: () => false, PUBLIC_KEY: null };
@@ -29,6 +32,21 @@ try {
   mobilePush = require('./mobilePush');
 } catch (e) {
   console.warn('Mobil push yüklənmədi:', e.message);
+}
+// Telegram botu (chat id MongoDB-də saxlanılır)
+let telegram = { sendToEveryone: async () => {}, getChats: async () => [], addChat: async () => [], removeChat: async () => [], sendToChats: async () => {}, isConfigured: () => false };
+try {
+  telegram = require('./telegram');
+} catch (e) {
+  console.warn('Telegram yüklənmədi:', e.message);
+}
+
+// OneSignal (web + mobil) — əsas kanal
+let oneSignal = { sendToEveryone: async () => {}, upsertPlayer: async () => {}, isConfigured: () => false };
+try {
+  oneSignal = require('./onesignal');
+} catch (e) {
+  console.warn('OneSignal yüklənmədi:', e.message);
 }
 const { computeStatus } = require('./models/Payment');
 const { auth, requireRole, sign } = require('./middleware/auth');
@@ -49,6 +67,43 @@ function cleanContacts(list) {
     .filter((c) => c.contactName || c.phone);
 }
 
+// ---------- Servis kodu ----------
+// 5 simvollu, hərf + rəqəm qarışığı. Oxşar simvollar (I, O, 0, 1) çıxarılıb.
+const SERVICE_CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const SERVICE_CODE_DIGITS = '23456789';
+
+function randomServiceCode() {
+  const all = SERVICE_CODE_LETTERS + SERVICE_CODE_DIGITS;
+  const chars = [
+    SERVICE_CODE_LETTERS[crypto.randomInt(SERVICE_CODE_LETTERS.length)],
+    SERVICE_CODE_DIGITS[crypto.randomInt(SERVICE_CODE_DIGITS.length)],
+  ];
+  for (let i = 0; i < 3; i++) chars.push(all[crypto.randomInt(all.length)]);
+  // Qarışdır ki, hərf/rəqəm həmişə eyni yerdə olmasın
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+}
+
+async function generateServiceCode() {
+  for (let i = 0; i < 25; i++) {
+    const code = randomServiceCode();
+    const exists = await Store.exists({ serviceCode: code });
+    if (!exists) return code;
+  }
+  throw new Error('Unikal servis kodu yaradıla bilmədi');
+}
+
+// Köhnə mağazalarda kod yoxdursa yaradıb yadda saxlayır
+async function ensureServiceCode(store) {
+  if (store.serviceCode) return store.serviceCode;
+  store.serviceCode = await generateServiceCode();
+  await store.save();
+  return store.serviceCode;
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -62,7 +117,7 @@ app.use((req, res, next) => {
 // ---------- Real-vaxt bildirişlər ----------
 let io = null;
 
-// Hadisəni dəyişən istifadəçiyə GÖNDƏRMİR, qalan bütün istifadəçilərə göndərir
+// Hadisəni BÜTÜN istifadəçilərə göndərir — o cümlədən dəyişən özü də bildiriş alır
 function broadcast(event, payload, originClientId, originUserId) {
   if (io) {
     for (const socket of io.sockets.sockets.values()) {
@@ -70,8 +125,34 @@ function broadcast(event, payload, originClientId, originUserId) {
     }
   }
   // Brauzer bağlıdırsa — web push göndər (özü dəyişənə göndərilmir)
-  push.sendToEveryone({ event, ...payload }, originUserId).catch(() => {});
-  // Mobil tətbiq bağlıdırsa — Expo push göndər
+  push.sendToEveryone({ event, ...payload }, null).catch(() => {});
+  // Mobil tətbiq bağlıdırsa — OneSignal göndər
+  oneSignal
+    .sendToEveryone(
+      {
+        title: payload.pushTitle || payload.title || 'PROMAR Helpdesk',
+        body: payload.pushBody || payload.message || '',
+        event,
+        url: '/',
+      },
+      null
+    )
+    .catch(() => {});
+
+  // Telegram botuna göndər (hər istifadəçi öz chat-ine alır)
+  telegram
+    .sendToEveryone({
+      title: payload.title,
+      body: payload.message,
+      store: payload.store,
+      event,
+      actor: payload.by,
+      resolved: payload.message ? /həll/i.test(payload.message) : false,
+      archived: payload.archived,
+    })
+    .catch(() => {});
+
+  // Expo push da göndərilir (ehtiyat)
   mobilePush
     .sendToEveryone(
       {
@@ -79,7 +160,7 @@ function broadcast(event, payload, originClientId, originUserId) {
         body: payload.pushBody || payload.message || '',
         data: { event, url: '/' },
       },
-      originUserId
+      null
     )
     .catch(() => {});
 
@@ -177,23 +258,134 @@ app.get('/api/users', auth, requireRole('admin'), async (req, res) => {
   res.json(users);
 });
 
-// ---------- Web push (brauzer bildirişləri) ----------
-// VAPID public açar (girişsiz — brauzer abunə yaratmaq üçün lazımdır)
-app.get('/api/push/config', (req, res) => {
+// İstifadəçini sil (öz hesabını silmək olmaz)
+app.delete('/api/users/:id', auth, requireRole('admin'), async (req, res) => {
+  if (String(req.user._id) === String(req.params.id)) {
+    return res.status(400).json({ error: 'Öz hesabınızı silmək olmaz' });
+  }
+  await User.findByIdAndDelete(req.params.id);
+  res.json({ ok: true });
+});
+
+// ---------- Telegram (hesaba bağlı) ----------
+// Telegram webhook-u göndərir: ?start=<code> ilə gələndə chat id-ni
+// həmin panel hesabına bağlayır. Bağlantılar MongoDB-də saxlanılır.
+app.post('/api/telegram/hook', async (req, res) => {
+  try {
+    const update = req.body || {};
+    const msg = update.message || update.edited_message;
+    if (!msg?.chat?.id) return res.json({ ok: true });
+
+    const chatId = String(msg.chat.id);
+    const code = (msg.text || '').replace(/^\/start\s*/i, '').trim();
+    const userId = code ? await telegram.useCode(code) : null;
+
+    if (userId) {
+      await telegram.link(chatId, userId);
+      await telegram.sendToChat(
+        chatId,
+        '✅ <b>PROMAR ilə əlaqələndirildiniz!</b>\n\nSiz indi panel hadisələrini bu chat-da alacaqsınız.\nYeni bağlantı üçün: Parametrlər → Telegram'
+      );
+      console.log('Telegram: chat bağlandı ->', chatId, 'userId', userId);
+    } else if (code) {
+      await telegram.sendToChat(chatId, '⚠️ Kod etibarsız və vaxtı keçib. Parametrlərdən yenidən "Telegram-ı qoş" basın.');
+    } else {
+      await telegram.sendToChat(
+        chatId,
+        '👋 Salam! Bu bot PROMAR panelinə bağlanır.\n\nBağlanmaq üçün panel → <b>Parametrlər → Telegram → "Telegram-ı qoş"</b> basın və verilən linki açın.'
+      );
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.warn('Telegram webhook xətası:', e.message);
+    res.json({ ok: true });
+  }
+});
+
+// Vəziyyət: bu hesab Telegram-a bağlıdır?
+app.get('/api/telegram/status', auth, async (req, res) => {
   res.json({
-    publicKey: push.PUBLIC_KEY || null,
-    web: push.isConfigured(),
-    mobile: mobilePush.isConfigured(),
+    enabled: telegram.isConfigured(),
+    bot: telegram.botUsername(),
+    linked: Boolean(await telegram.getChatForUser(req.user._id)),
   });
 });
 
-// Mobil push token qeydi / söndürmə
+// Bağlantı linki yarad (deep link)
+app.post('/api/telegram/link', auth, async (req, res) => {
+  const code = await telegram.createCode(req.user._id);
+  res.json({
+    ok: true,
+    code,
+    url: `https://t.me/${telegram.botUsername()}?start=${code}`,
+  });
+});
+
+// Bağlantını qaldır
+app.post('/api/telegram/unlink', auth, async (req, res) => {
+  await telegram.unlinkUser(req.user._id);
+  res.json({ ok: true });
+});
+
+// Test mesajı — yalnız bu hesaba (istəyə görə xüsusi mətn)
+app.post('/api/telegram/test', auth, async (req, res) => {
+  const text = req.body?.text
+    ? String(req.body.text)
+    : '<b>PROMAR test</b>\nTelegram bildirişləri işləyir ✅';
+  const r = await telegram.sendToUser(req.user._id, text);
+  res.json(r.ok ? { ok: true } : { error: r.reason || 'Göndərmə xətası' });
+});
+
+// ---------- Push konfiqurasiyası ----------
+// VAPID public açar (girişsiz — brauzer abunə yaratmaq üçün lazımdır)
+app.get('/api/push/config', (req, res) => {
+  res.json({
+    // WebSocket/Web push (VAPID) — mövcud mexanizm
+    publicKey: push.PUBLIC_KEY || null,
+    // OneSignal
+    oneSignal: {
+      appId: process.env.ONESIGNAL_APP_ID || null,
+      enabled: oneSignal.isConfigured(),
+    },
+    web: oneSignal.isConfigured() || push.isConfigured(),
+    mobile: oneSignal.isConfigured() || mobilePush.isConfigured(),
+  });
+});
+
+// Diaqnostik: mənim qeydi olunan cihazlarım (test üçün)
+app.get('/api/push/mine', auth, async (req, res) => {
+  const rows = await MobilePush.find({ user: req.user._id }).sort({ _id: -1 }).limit(20).lean();
+  res.json({
+    count: rows.length,
+    devices: rows.map((r) => ({
+      platform: r.platform,
+      active: r.active,
+      token: String(r.token).slice(0, 24) + '…',
+      createdAt: r.createdAt,
+    })),
+  });
+});
+
+// OneSignal player qeydi (external_id = istifadəçi id)
+app.post('/api/push/onesignal', auth, async (req, res) => {
+  const { playerId, platform } = req.body;
+  if (!playerId) return res.status(400).json({ error: 'playerId tələb olunur' });
+  await oneSignal.upsertPlayer(playerId, req.user._id, platform || 'web');
+  res.json({ ok: true });
+});
+
+// Mobil (FCM) token qeydi / söndürmə
 app.post('/api/push/mobile', auth, async (req, res) => {
   const { token, platform } = req.body;
   if (!token) return res.status(400).json({ error: 'Token tələb olunur' });
   await MobilePush.findOneAndUpdate(
     { token },
-    { token, platform: platform === 'ios' ? 'ios' : 'android', user: req.user._id, active: true },
+    {
+      token,
+      platform: platform === 'ios' ? 'ios' : platform === 'web' ? 'web' : 'android',
+      user: req.user._id,
+      active: true,
+    },
     { new: true, upsert: true }
   );
   res.json({ ok: true });
@@ -231,7 +423,15 @@ app.get('/api/stores', requireRole('admin'), async (req, res) => {
   const { active } = req.query;
   const filter = {};
   if (active !== undefined) filter.active = active === 'true';
-  const stores = await Store.find(filter).sort({ name: 1 });
+  // Əlavə edilmə tarixinə görə sıralanır (elifba sırası yoxdur)
+  const stores = await Store.find(filter).sort({ createdAt: 1, _id: 1 });
+
+  // Servis kodu olmayan mağazalara avtomatik verilir.
+  // Mağaza səhifəsi də bu endpoint-i çağırdığı üçün ora girəndə də kod yaranır.
+  for (const store of stores) {
+    if (!store.serviceCode) await ensureServiceCode(store);
+  }
+
   res.json(stores);
 });
 
@@ -247,6 +447,7 @@ app.post('/api/stores', requireRole('admin'), async (req, res) => {
   if (amount != null && amount !== '') {
     prices.push({ amount: Number(amount), effectiveFrom: effectiveFrom || currentMonth() });
   }
+  const serviceCode = await generateServiceCode();
   const store = await Store.create({
     name,
     mapUrl,
@@ -254,6 +455,7 @@ app.post('/api/stores', requireRole('admin'), async (req, res) => {
     note,
     active: active === undefined ? true : !!active,
     prices,
+    serviceCode,
   });
   res.status(201).json(store);
 });
@@ -304,7 +506,7 @@ app.get('/api/payments', async (req, res) => {
   const includeInactive = admin && req.query.includeInactive === 'true';
 
   const storeFilter = includeInactive ? {} : { active: true };
-  const stores = await Store.find(storeFilter).sort({ name: 1 });
+  const stores = await Store.find(storeFilter).sort({ createdAt: 1, _id: 1 });
   const payments = await Payment.find({ month });
 
   const paidMap = {};
@@ -320,7 +522,8 @@ app.get('/api/payments', async (req, res) => {
         contacts: s.contacts,
         active: s.active,
       },
-      status: computeStatus(month, !!payment),
+      // Əl ilə gecikdirilmiş işarələnmiş aylar və sonrakılar
+      status: storeStatus(s, month, !!payment),
     };
     if (!admin) return row; // məbləğ və qiymət göndərilmir
 
@@ -336,6 +539,13 @@ app.get('/api/payments', async (req, res) => {
 
   res.json({ month, rows });
 });
+
+// Mağazanın ödəniş statusu — əl ilə "gecikdi" işarəsi də nəzərə alınır
+function storeStatus(store, month, hasPayment) {
+  if (hasPayment) return 'paid';
+  if (store.lateFrom && month >= store.lateFrom) return 'overdue';
+  return computeStatus(month, false);
+}
 
 app.post('/api/payments', requireRole('admin'), async (req, res) => {
   const { storeId, month, amount, paidAt, note } = req.body;
@@ -397,6 +607,228 @@ app.post('/api/stores/:id/payments/bulk', requireRole('admin'), async (req, res)
   res.status(201).json({ created, skipped, failed });
 });
 
+// Ayı "gecikdi" işarələmək — bu ay və sonrakı bütün aylar gecikdirilmiş olur
+app.post('/api/stores/:id/late', requireRole('admin'), async (req, res) => {
+  const { month } = req.body || {};
+  if (!month) return res.status(400).json({ error: 'Ay tələb olunur' });
+
+  const store = await Store.findById(req.params.id);
+  if (!store) return res.status(404).json({ error: 'Mağaza tapılmadı' });
+
+  // ən erkən gecikmiş ay saxlanılır
+  if (!store.lateFrom || month < store.lateFrom) store.lateFrom = month;
+  await store.save();
+
+  res.json({ ok: true, lateFrom: store.lateFrom });
+});
+
+// Gecikmiş işarəsini sil
+app.delete('/api/stores/:id/late', requireRole('admin'), async (req, res) => {
+  const store = await Store.findById(req.params.id);
+  if (!store) return res.status(404).json({ error: 'Mağaza tapılmadı' });
+  store.lateFrom = null;
+  await store.save();
+  res.json({ ok: true, lateFrom: null });
+});
+
+// ---------- Kassa (gəlir / xərc) ----------
+// Ay sərhədləri (lokal vaxt) — "YYYY-MM" üçün [başlanğıc, son)
+function monthBounds(month) {
+  const [y, m] = month.split('-').map(Number);
+  return { start: new Date(y, m - 1, 1), end: new Date(y, m, 1) };
+}
+
+function monthOfDate(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Kassa: ümumi qalıq + seçilmiş ayın gəlir/xərc yazıları.
+// Mağaza ödənişləri də gəlir kimi bu siyahıya düşür (ödəniş tarixinə görə).
+app.get('/api/cash', requireRole('admin'), async (req, res) => {
+  const month = req.query.month || currentMonth();
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return res.status(400).json({ error: 'Ay formatı düzgün deyil' });
+  }
+
+  const { start, end } = monthBounds(month);
+
+  const [manual, payments, cashTotals, paymentTotals, paymentDates, cashMonths] = await Promise.all([
+    CashEntry.find({ month }).sort({ date: -1, createdAt: -1 }),
+    Payment.find({ paidAt: { $gte: start, $lt: end } })
+      .populate('store', 'name')
+      .sort({ paidAt: -1, createdAt: -1 }),
+    CashEntry.aggregate([{ $group: { _id: '$type', total: { $sum: '$amount' } } }]),
+    Payment.aggregate([{ $group: { _id: null, total: { $sum: '$amount' } } }]),
+    Payment.find({}).select('paidAt').sort({ paidAt: 1 }),
+    CashEntry.distinct('month'),
+  ]);
+
+  const cashIn = cashTotals.find((t) => t._id === 'in')?.total || 0;
+  const cashOut = cashTotals.find((t) => t._id === 'out')?.total || 0;
+  const paymentTotal = paymentTotals[0]?.total || 0;
+  const balance = cashIn - cashOut + paymentTotal;
+
+  const entries = [
+    ...manual.map((e) => ({
+      id: String(e._id),
+      source: 'manual',
+      type: e.type,
+      title: e.title,
+      amount: e.amount,
+      date: e.date,
+      note: e.note,
+    })),
+    ...payments.map((p) => ({
+      id: String(p._id),
+      source: 'payment',
+      type: 'in',
+      title: p.store?.name ? `${p.store.name} — aylıq ödəniş` : 'Mağaza ödənişi',
+      amount: p.amount,
+      date: p.paidAt,
+      note: p.note,
+      paymentMonth: p.month,
+    })),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const income = entries.filter((e) => e.type === 'in').reduce((s, e) => s + e.amount, 0);
+  const expense = entries.filter((e) => e.type === 'out').reduce((s, e) => s + e.amount, 0);
+
+  // Filtr üçün mövcud aylar (yazı olan aylar + ödəniş ayları + cari ay)
+  const monthSet = new Set([...cashMonths, currentMonth(), ...paymentDates.map((p) => monthOfDate(p.paidAt))]);
+  const months = Array.from(monthSet)
+    .filter((m) => /^\d{4}-\d{2}$/.test(m))
+    .sort((a, b) => (a < b ? 1 : -1));
+
+  res.json({
+    month,
+    balance,
+    income,
+    expense,
+    net: income - expense,
+    entries,
+    months,
+  });
+});
+
+// Əl ilə gəlir/xərc əlavə etmək
+app.post('/api/cash', requireRole('admin'), async (req, res) => {
+  const { type, title, amount, date, note } = req.body || {};
+
+  if (type !== 'in' && type !== 'out') {
+    return res.status(400).json({ error: 'Növ düzgün deyil' });
+  }
+  if (!title || !String(title).trim()) {
+    return res.status(400).json({ error: 'Ad tələb olunur' });
+  }
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) {
+    return res.status(400).json({ error: 'Məbləğ 0-dan böyük olmalıdır' });
+  }
+  const when = date ? new Date(date) : new Date();
+  if (Number.isNaN(when.getTime())) {
+    return res.status(400).json({ error: 'Tarix düzgün deyil' });
+  }
+
+  const entry = await CashEntry.create({
+    type,
+    title: String(title).trim(),
+    amount: value,
+    date: when,
+    month: monthOfDate(when),
+    note: note ? String(note).trim() : '',
+    createdBy: req.user?._id,
+  });
+
+  res.status(201).json(entry);
+});
+
+// Yalnız əl ilə əlavə edilən yazını silmək olar (ödənişlər ödənişlər bölməsindən idarə olunur)
+app.delete('/api/cash/:id', requireRole('admin'), async (req, res) => {
+  const entry = await CashEntry.findByIdAndDelete(req.params.id);
+  if (!entry) return res.status(404).json({ error: 'Yazı tapılmadı' });
+  res.json({ ok: true });
+});
+
+// ---------- Hesabatlar (aylıq + ümumi 2022-dən) ----------
+// ?from=2022-01&to=2026-10
+app.get('/api/report', requireRole('admin'), async (req, res) => {
+  const to = req.query.to || currentMonth();
+  const from = req.query.from || '2022-01';
+  const singleMonth = from === to;
+
+  const stores = await Store.find({}).sort({ createdAt: 1, _id: 1 });
+  const payments = await Payment.find({ month: { $gte: from, $lte: to } });
+
+  // storeId+month -> payment
+  const pMap = {};
+  for (const p of payments) pMap[`${p.store}|${p.month}`] = p;
+
+  const months = singleMonth ? [to] : monthRange(from, to);
+
+  const rows = [];
+  let tExpected = 0;
+  let tCollected = 0;
+  let tLate = 0;
+
+  for (const s of stores) {
+    // Xidmətin başlanğıcı = ilk ödəniş (yoxdursa heç nə hesablanmır)
+    const first = await Payment.findOne({ store: s._id }).sort({ month: 1 }).select('month');
+    const startMonth = first?.month || null;
+    if (!startMonth) continue; // heç ödəniş etməyən mağaza hesabatda yoxdur
+
+    const store = {
+      _id: s._id,
+      name: s.name,
+      active: s.active,
+      startMonth,
+      lateFrom: s.lateFrom,
+      months: [],
+      expected: 0,
+      collected: 0,
+      debt: 0,
+      lateMonths: 0,
+      pendingMonths: 0,
+      paidMonths: 0,
+    };
+
+    for (const month of months) {
+      if (month < startMonth) continue;
+      const payment = pMap[`${s._id}|${month}`] || null;
+      const price = s.priceForMonth(month) || 0;
+      const status = storeStatus(s, month, !!payment);
+
+      store.months.push({ month, price, status, paid: payment?.amount || 0 });
+      store.expected += price;
+      store.collected += payment?.amount || 0;
+      if (status === 'overdue') store.lateMonths += 1;
+      else if (status === 'pending') store.pendingMonths += 1;
+      else if (status === 'paid') store.paidMonths += 1;
+    }
+
+    store.debt = Math.max(0, store.expected - store.collected);
+    tExpected += store.expected;
+    tCollected += store.collected;
+    tLate += store.lateMonths;
+    rows.push(store);
+  }
+
+  res.json({
+    from,
+    to,
+    singleMonth,
+    months,
+    rows,
+    totals: {
+      stores: rows.length,
+      expected: tExpected,
+      collected: tCollected,
+      debt: Math.max(0, tExpected - tCollected),
+      lateMonths: tLate,
+    },
+  });
+});
+
 // Bir mağazanın bütün aylara görə ödəniş cədvəli (tarix aralığı ilə) — yalnız admin
 app.get('/api/stores/:id/payments', requireRole('admin'), async (req, res) => {
   const store = await Store.findById(req.params.id);
@@ -420,7 +852,7 @@ app.get('/api/stores/:id/payments', requireRole('admin'), async (req, res) => {
   const cells = months.map((month) => {
     const payment = paidMap[month] || null;
     // Başlanğıcdan əvvəlki aylar boş
-    const status = month < startMonth ? 'none' : computeStatus(month, !!payment);
+    const status = month < startMonth ? 'none' : storeStatus(store, month, !!payment);
     return {
       month,
       price: store.priceForMonth(month),
@@ -434,7 +866,18 @@ app.get('/api/stores/:id/payments', requireRole('admin'), async (req, res) => {
     };
   });
 
-  res.json({ store, from, to, startMonth, cells });
+  // Cədvəl üzrə yekun xülasə
+  const activeCells = cells.filter((c) => c.status !== 'none');
+  const summary = {
+    expected: activeCells.reduce((s, c) => s + (c.price || 0), 0),
+    collected: activeCells.reduce((s, c) => s + (c.payment?.amount || 0), 0),
+    paidMonths: activeCells.filter((c) => c.status === 'paid').length,
+    lateMonths: activeCells.filter((c) => c.status === 'overdue').length,
+    pendingMonths: activeCells.filter((c) => c.status === 'pending').length,
+  };
+  summary.debt = Math.max(0, summary.expected - summary.collected);
+
+  res.json({ store, from, to, startMonth, lateFrom: store.lateFrom, cells, summary });
 });
 
 function shiftMonth(month, delta) {
@@ -607,17 +1050,27 @@ app.use(express.static(clientDist, {
     }
   },
 }));
+// Xəta handler-i — serverless-da HTML 500 yerine aydın JSON qaytarır
+app.use((err, req, res, _next) => {
+  const msg = String(err?.message || err);
+  const blocked = /whitelist|not authorized|IP address|buffering timed out|ECONNREFUSED|server selection/i.test(msg);
+  console.error('API xətası:', msg);
+  res.status(503).json({
+    error: blocked
+      ? 'MongoDB bağlantısı bloklanıb: Atlas > Network Access > "Allow access from anywhere" (0.0.0.0/0)'
+      : 'Server xətası',
+    detail: msg.slice(0, 160),
+  });
+});
+
 // Serverless mühit (Vercel, Netlify Functions): daimi proses yoxdur,
 // WebSocket də işləmər — funksiya yalnız HTTP sorğularını cavablandırır.
 const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
-// SPA fallback
+// SPA fallback (Vercel-də də işləyir — statik fayllar funksiyanın özündədir)
 app.get(/^(?!\/api).*/, (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-  // Vercel-də statik fayllar CDN tərəfindən verilir (routes: /->index.html),
-  // funksiya yalnız //api sorğularına baxır
-  if (IS_SERVERLESS) return res.status(404).json({ error: 'Not found' });
-  return res.sendFile(path.join(clientDist, 'index.html'));
+  res.sendFile(path.join(clientDist, 'index.html'));
 });
 
 const PORT = process.env.PORT || 5000;

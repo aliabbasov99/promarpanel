@@ -64,8 +64,19 @@ export default function Issues() {
           </div>
         </div>
         <div className="toolbar">
-          <button className={`btn ${view === 'archive' ? '' : 'ghost'}`} onClick={() => setView('archive')}>
-            <LuArchive size={16} /> Arxiv
+          <button
+            className={`btn ${view === 'archive' ? '' : 'ghost'}`}
+            onClick={() => setView(view === 'archive' ? 'active' : 'archive')}
+          >
+            {view === 'archive' ? (
+              <>
+                <LuUndo2 size={16} /> Aktiv siyahı
+              </>
+            ) : (
+              <>
+                <LuArchive size={16} /> Arxiv
+              </>
+            )}
           </button>
           <button className="btn" onClick={() => setShowModal(true)}>
             <LuPlus size={16} /> Yeni problem

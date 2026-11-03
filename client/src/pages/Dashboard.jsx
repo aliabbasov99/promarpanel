@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { currentMonth, monthLabel, formatMoney } from '../utils';
-import { LuCheck, LuClock, LuTriangleAlert, LuStore, LuTriangleAlert as LuBug, LuArrowRight, LuMapPin } from 'react-icons/lu';
+import { LuCheck, LuClock, LuTriangleAlert, LuStore, LuTriangleAlert as LuBug, LuArrowRight, LuMapPin, LuWallet, LuArrowDownLeft, LuArrowUpRight } from 'react-icons/lu';
 import { useAuth } from '../auth';
 import { useLiveRefresh } from '../useLiveRefresh';
 
@@ -11,6 +11,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [rows, setRows] = useState([]);
   const [openIssues, setOpenIssues] = useState([]);
+  const [cash, setCash] = useState(null);
   const [error, setError] = useState('');
 
   const month = currentMonth();
@@ -26,11 +27,12 @@ export default function Dashboard() {
         setStats(s);
         setRows(p.rows);
         setOpenIssues(i.slice(0, 6));
+        if (isAdmin) setCash(await api.getCash(month));
       } catch (e) {
         setError(e.message);
       }
     })();
-  }, [month]);
+  }, [month, isAdmin]);
 
   // Serverless rejimdə (WebSocket yoxdur) ehtiyat yeniləmə
   useLiveRefresh(
@@ -38,7 +40,8 @@ export default function Dashboard() {
       api.getStats(month).then(setStats).catch(() => {});
       api.getPayments(month).then((d) => setRows(d.rows)).catch(() => {});
       api.getIssues('?status=open').then((i) => setOpenIssues(i.slice(0, 6))).catch(() => {});
-    }, [month])
+      if (isAdmin) api.getCash(month).then(setCash).catch(() => {});
+    }, [month, isAdmin])
   );
 
   if (error) return <div className="error-box">Xəta: {error}</div>;
@@ -54,7 +57,34 @@ export default function Dashboard() {
           <h1>İdarəetmə Paneli</h1>
           <div className="sub">Aylıq vəziyyət — {monthLabel(month)}</div>
         </div>
+        {isAdmin && (
+          <div className="toolbar">
+            <Link to="/kassa" className="btn ghost">
+              <LuWallet size={15} /> Kassa tarixçəsi
+            </Link>
+          </div>
+        )}
       </div>
+
+      {isAdmin && cash && (
+        <div className="stat-grid">
+          <div className="stat-card secondary cash-balance">
+            <div className="label"><LuWallet size={13} /> Kassa qalığı</div>
+            <div className="value">{formatMoney(cash.balance)}</div>
+            <div className="label" style={{ marginTop: 6 }}>Bütün dövr üzrə</div>
+          </div>
+          <div className="stat-card success">
+            <div className="label"><LuArrowDownLeft size={13} /> Gələnlər</div>
+            <div className="value">{formatMoney(cash.income)}</div>
+            <div className="label" style={{ marginTop: 6 }}>{monthLabel(month)}</div>
+          </div>
+          <div className="stat-card danger">
+            <div className="label"><LuArrowUpRight size={13} /> Gedənlər</div>
+            <div className="value">{formatMoney(cash.expense)}</div>
+            <div className="label" style={{ marginTop: 6 }}>{monthLabel(month)}</div>
+          </div>
+        </div>
+      )}
 
       <div className="stat-grid">
         <div className="stat-card">

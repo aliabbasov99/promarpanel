@@ -5,16 +5,17 @@ import { useAuth } from '../auth';
 import { api } from '../api';
 import { applyTheme } from '../theme';
 import { initPWA, getState, onInstallChange, promptInstall } from '../pwa';
+import { initOneSignal } from '../oneSignal';
 import {
   pushSupported, permission, enablePush, disablePush, isSubscribed, VAPID_HELP,
 } from '../push';
 import {
-  LuBell, LuMoon, LuSun, LuKeyRound, LuLogOut, LuUsers, LuCheck,
+  LuBell, LuMoon, LuSun, LuKeyRound, LuLogOut, LuUsers, LuCheck, LuSend,
 } from 'react-icons/lu';
 
 export default function Settings() {
   const { online } = useNotify();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   const [theme, setTheme] = useState(localStorage.getItem('promar.theme') || 'light');
@@ -25,6 +26,7 @@ export default function Settings() {
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushInfo, setPushInfo] = useState('');
+  const [perm, setPerm] = useState('default');
 
   // PWA (tətbiqi yüklə)
   const [pwa, setPwa] = useState({ canInstall: false, installed: false, ios: false, secure: true });
@@ -56,25 +58,25 @@ export default function Settings() {
 
   useEffect(() => {
     (async () => {
-      if (!pushSupported()) return setPushInfo('Bu brauzer push dəstəkləmir');
-      if (!window.isSecureContext) {
-        return setPushInfo(`${VAPID_HELP} (İndi: http://${location.host})`);
+      if (!('Notification' in window)) return setPerm('unsupported');
+      setPerm(Notification.permission);
+      if (Notification.permission === 'default') {
+        // İlk açılışda icazə soruşulur (yalnız bir dəfə)
+        const p = await permission();
+        setPerm(p);
       }
-      const perm = await permission();
-      if (perm === 'denied') {
-        return setPushInfo('Brauzer icazəsi rədd edilib — brauzer ayarlarından açın');
-      }
+      if (!pushSupported() || !window.isSecureContext) return;
       const sub = await isSubscribed();
       setPushOn(sub);
-      setPushInfo(
-        sub
-          ? 'Aktivdır — brauzer bağlı olanda da bildiriş gələcək'
-          : perm === 'granted'
-            ? 'Hələ yandırılmayıb'
-            : 'Yandırmaq üçün brauzer icazəsi lazımdır'
-      );
     })();
   }, []);
+
+  // Brauzer ayarlarında bildiriş icazələrini açmaq
+  const openBrowserSettings = () => {
+    const url = `chrome://settings/content/notifications`;
+    const w = window.open(url, '_blank');
+    if (!w) location.href = url; // yeni sekməsi bloklanıb
+  };
 
   const askPush = async () => {
     setPushBusy(true);
@@ -105,6 +107,115 @@ export default function Settings() {
       setPushInfo('Söndürülüb');
     } finally {
       setPushBusy(false);
+    }
+  };
+
+  // ---- Telegram (hesaba bağlı) ----
+  const [tg, setTg] = useState({ linked: false, enabled: false, url: '', bot: '' });
+  const [tgBusy, setTgBusy] = useState(false);
+
+  const loadTg = async () => {
+    try {
+      const s = await api.telegramStatus();
+      setTg((t) => ({ ...t, ...s }));
+    } catch {
+      /* server əlçatan deyilsə sus */
+    }
+  };
+
+  useEffect(() => {
+    loadTg();
+  }, []);
+
+  const tgLink = async () => {
+    setTgBusy(true);
+    try {
+      const r = await api.telegramLink();
+      setTg((t) => ({ ...t, url: r.url, code: r.code }));
+    } catch (e) {
+      alert('Telegram linki yaradıla bilmədi: ' + e.message);
+    } finally {
+      setTgBusy(false);
+    }
+  };
+
+  const tgUnlink = async () => {
+    setTgBusy(true);
+    try {
+      await api.telegramUnlink();
+      setTg((t) => ({ ...t, linked: false, url: '' }));
+    } finally {
+      setTgBusy(false);
+    }
+  };
+
+  const tgTest = async () => {
+    setTgBusy(true);
+    try {
+      const r = await api.telegramTest();
+      if (r.error) alert(r.error);
+    } catch (e) {
+      alert('Test göndərilmədi: ' + e.message);
+    } finally {
+      setTgBusy(false);
+    }
+  };
+
+  // ---- İstifadəçilər (admin) ----
+  const [users, setUsers] = useState([]);
+  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'helpdesk' });
+  const [busyUser, setBusyUser] = useState(false);
+  const [userErr, setUserErr] = useState('');
+
+  const loadUsers = async () => {
+    try {
+      setUsers(await api.getUsers());
+    } catch {
+      setUsers([]);
+    }
+  };
+
+  const createUser = async () => {
+    if (!newUser.username.trim() || !newUser.password) {
+      return setUserErr('İstifadəçi adı və parol tələb olunur');
+    }
+    setBusyUser(true);
+    setUserErr('');
+    try {
+      await api.createUser(newUser);
+      setNewUser({ username: '', password: '', role: 'helpdesk' });
+      await loadUsers();
+    } catch (e) {
+      setUserErr(e.message);
+    } finally {
+      setBusyUser(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) loadUsers();
+  }, [isAdmin]);
+
+  // ---- OneSignal bildirişi ----
+  const [osBusy, setOsBusy] = useState(false);
+  const [osOn, setOsOn] = useState(false);
+
+  const askOneSignal = async () => {
+    setOsBusy(true);
+    try {
+      const res = await initOneSignal();
+      if (res.ok) {
+        setOsOn(true);
+      } else {
+        setOsOn(false);
+        alert(
+          res.reason === 'denied'
+            ? 'Bildiriş icazəsi rədd edildi — brauzer ayarlarından açın.'
+            : 'Bildiriş yandırıla bilmədi: ' + res.reason
+        );
+      }
+    } finally {
+      setOsBusy(false);
     }
   };
 
@@ -162,6 +273,120 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* İstifadəçilər — yalnız admin */}
+      {isAdmin && (
+        <div className="panel" style={{ marginBottom: 18 }}>
+          <div className="panel-head">
+            <h2><LuUsers size={16} /> İstifadəçilər</h2>
+          </div>
+          <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {users.map((u) => (
+              <div key={u._id} className="settings-row" style={{ borderTop: 'none', paddingTop: 0 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>
+                    {u.username} {u._id === user?._id ? <span className="muted">(siz)</span> : null}
+                  </div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    {u.role === 'admin' ? 'Admin — tam hüquq' : 'Helpdesk — yalnız cari ay statusu'}
+                  </div>
+                </div>
+                {u._id !== user?._id && (
+                  <button
+                    className="btn ghost sm"
+                    onClick={async () => {
+                      if (!confirm(`${u.username} hesabını silmək istəyirsiniz?`)) return;
+                      await api.deleteUser(u._id);
+                      loadUsers();
+                    }}
+                  >
+                    Sil
+                  </button>
+                )}
+              </div>
+            ))}
+
+            <div className="settings-row" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <div style={{ flex: 1, minWidth: 180, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input
+                  className="input"
+                  placeholder="İstifadəçi adı"
+                  value={newUser.username}
+                  onChange={(e) => setNewUser((u) => ({ ...u, username: e.target.value }))}
+                  autoCapitalize="none"
+                />
+                <input
+                  className="input"
+                  placeholder="Parol"
+                  type="password"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser((u) => ({ ...u, password: e.target.value }))}
+                />
+                <select
+                  className="input"
+                  value={newUser.role}
+                  onChange={(e) => setNewUser((u) => ({ ...u, role: e.target.value }))}
+                  style={{ maxWidth: 140 }}
+                >
+                  <option value="helpdesk">Helpdesk</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <button className="btn sm" onClick={createUser} disabled={busyUser}>
+                {busyUser ? 'Yaradılır…' : 'Əlavə et'}
+              </button>
+            </div>
+            {userErr && <div className="error-box">{userErr}</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Telegram */}
+      <div className="panel" style={{ marginBottom: 18 }}>
+        <div className="panel-head">
+          <h2><LuSend size={16} /> Telegram</h2>
+        </div>
+        <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="settings-row" style={{ borderTop: 'none', paddingTop: 0 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                {tg.linked ? 'Bağlıdır' : 'Bağlı deyil'}
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                {tg.linked
+                  ? 'Hadisələr bu Telegram hesabınıza gələcək'
+                  : 'İstifadəçi adı və parolunuzla giriş etdiyiniz hesabın hadisələri Telegram-a gəlsin'}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              {tg.linked ? (
+                <>
+                  <button className="btn ghost sm" onClick={tgTest} disabled={tgBusy}>
+                    Test
+                  </button>
+                  <button className="btn ghost sm" onClick={tgUnlink} disabled={tgBusy}>
+                    Söndür
+                  </button>
+                </>
+              ) : (
+                <button className="btn sm" onClick={tgLink} disabled={tgBusy}>
+                  {tgBusy ? 'Yaradılır…' : 'Telegram-ı qoş'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {tg.url && (
+            <div className="hint">
+              Bu linki Telegram-da açın və **Start** düyməsini basın:
+              <br />
+              <a href={tg.url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>
+                {tg.url}
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Bildirişlər */}
       <div className="panel" style={{ marginBottom: 18 }}>
         <div className="panel-head">
@@ -175,29 +400,43 @@ export default function Settings() {
             </button>
           </div>
         </div>
-        <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="settings-empty">
-            {notifOn
-              ? 'Bildirişlər açıqdır — başqası problem açanda və status dəyişəndə xəbərdarlıq alırsınız.'
-              : 'Bildirişlər bağlıdır — problem və status dəyişiklikləri göstərilməyəcək.'}
-          </div>
-
-          {/* Brauzer push: tab/brauzer bağlı olanda da bildiriş gəlir */}
-          <div className="settings-row">
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>Brauzer bildirişi (push)</div>
-              <div className="muted" style={{ fontSize: 12 }}>{pushInfo}</div>
+        <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Bildiriş icazəsi açıq deyilsə — brauzer ayarlarına açmaq düyməsi */}
+          {perm === 'denied' && (
+            <div className="settings-row" style={{ borderTop: 'none', paddingTop: 0 }}>
+              <div className="muted" style={{ fontSize: 13 }}>
+                Bildiriş icazələri bağlıdır
+              </div>
+              <button className="btn sm" onClick={openBrowserSettings}>
+                Bildiriş icazələrini aç
+              </button>
             </div>
+          )}
+
+          {/* OneSignal — əsas kanal */}
+          <div className="settings-row" style={{ borderTop: 'none', paddingTop: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Bildirişləri yandır</div>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              {!pushOn ? (
-                <button className="btn sm" onClick={askPush} disabled={pushBusy}>
-                  {pushBusy ? 'Gözlənilir…' : 'Yandır'}
+              {!osOn ? (
+                <button className="btn sm" onClick={askOneSignal} disabled={osBusy}>
+                  {osBusy ? 'Gözlənilir…' : 'Yandır'}
                 </button>
               ) : (
-                <button className="btn ghost sm" onClick={turnOffPush}>Söndür</button>
+                <button className="btn ghost sm" onClick={() => { setOsOn(false); setOsInfo('Söndürüldü'); }}>
+                  Söndür
+                </button>
               )}
             </div>
           </div>
+
+          {pushOn && (
+            <div className="settings-row" style={{ borderTop: 'none', paddingTop: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Brauzer bildirişi</div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button className="btn ghost sm" onClick={turnOffPush}>Söndür</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

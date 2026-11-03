@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "promarpanel",
+  "private_key_id": "bc6237f9ff0ffc79593dfbc9463796db733714cb",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCuWKrvTzD8yGoI\n8e1DnTHGBFVlvld9BI2CAtiwyJpHkApdettsweECzkltwfXCnu4APw54knL+4Br5\nIdfD+qiFvP6Gpptmwy5OVfzxQk6v/QM9fYgQQ0VI6uZg2JDbzHGMRkgWpI+mmVJb\npqpJHv0tuFDEBa/WCOxNRWNzzMrz14G+HBIFeh4sO+/BhS47p7aRCOqxnk0uVnN6\nKYDum/1+0N5GLEL7HfotmlQdagefHpe9yCNdfYnL+Rv7EDmq3WP1dWRKrOQFarrw\nQpuVC9ETDMmzHQEHWK20FIpxlsvoccE5EM8d6GU3/FcdlZXe/FSYjakoEQaLgsZr\n39oKoFLDAgMBAAECggEAI7CzDVpAxP6h9kLQN08uqUKp2LImZslPzpWWlln6ezvZ\nY1mLIbBux4xDK9zQ2o5+Wj6OT9BrChIGc4miCdR+OyJ9WEMy/M5n5FFl/l18jjpV\nN3lDKVEcFdlAYAL1ZIltlTGuADSf05L/cROlOGLHoVxh7D7dyAr7lLXnrgT2ZwQY\nB7H8bSVdrV0Xo48wX345lWm6vGAUmIwSpJJWk5+q4kJhoULYoKz01gi3vdcdnmmH\nRwIr3bm6g/z6EtHfY08F1kO6E+k8CZwD5ttpJx9GZQKNQnCKQD9BaANzkkWngOex\n/gBFEkcOLu+Y8fuQRxebKsoPM59ZF9f6tA9+hV4kQQKBgQDndr5dLMxAq3gM/rDb\ne9QH//2fCuPbOf7nDNXI9222Y3fLVfaZQ39XuYs1ACW3Ow0YpBxmGOYCCxpKvGiC\noltbpLwKSSksYxikvgOuNaTraJbot84ilwI76iGksUyzN3/gKOBSDYYYslVx4O5k\nVsInD2mA8nLkY5zdxIDibRx6DwKBgQDA0+vmoMYVUnVTj0E+Ko73nkMC3ygIJ1DF\nWsLKUqdcSfWfT2FJLEsHJctixHG9IJybouD154Tm5m7OgDiKgx57AokbRa/84m8j\nbB1X4GLSp7HUEEN7qC4cxlhX+rt78YhXG793XgGB/TjVothOBxWmi1TQyH+DQklj\n67fDKY/gDQKBgH5BQy1H1lIgNefAtW/DZ7DFbe5m3ksio2wckDCC5pFqSFndlhmb\nu8Z6KvjKD8iWqVobinIWer/6lmjVxJwdO4ANp5Rku9S+aR7TluZb1I2kC0z9la9A\nd7N+zsMrAw9u4o2/Pj0Dq3WlMP5hFygcOuNbgM0Zcpopy9Mb8MGRisr5AoGAeHWr\nP/cd54IMs3ehrWFO0Ne4Sxn3WyicZ72sRFJgJOI7JBulzd1yvXNZ3EiWOS0fSIb2\n/Ad22fwIKs6lA7qnlvbdigD90P/vp/RJXHVbpveFutGyJpTIwccSt1t2NhaMMsat\n1LcQQBFdqPBDKnN4jgMqqAcoyWnmiRpfQPc83x0CgYAECkIC9QEWR2J+hjvQF5AJ\nFWeYy+tT8IC3ZHgpxXO35SzoYgjpJ4eH+JJvv0UI10eNgLz+CxqC3G+AN6bkMheC\nfFZTAudiEhQVZhe2bK3rPM70PBmnZwZX3Uv2dAeA3dlWco9Ej/2TwbaZTXoFADDT\nKvpJVq7DPSyE39XNBA9sxA==\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-fbsvc@promarpanel.iam.gserviceaccount.com",
+  "client_id": "115936680383545391377",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40promarpanel.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

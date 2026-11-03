@@ -1,11 +1,12 @@
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
-  LuLayoutDashboard, LuCreditCard, LuTriangleAlert, LuStore, LuSettings,
+  LuLayoutDashboard, LuCreditCard, LuTriangleAlert, LuStore, LuSettings, LuWallet,
   LuPanelLeftClose, LuPanelLeftOpen,
 } from 'react-icons/lu';
 import logoWhite from './assets/promar-logo-white.png';
 import Dashboard from './pages/Dashboard';
+import Cash from './pages/Cash';
 import Payments from './pages/Payments';
 import Issues from './pages/Issues';
 import Stores from './pages/Stores';
@@ -25,6 +26,7 @@ registerSW(); // Service Worker (PWA quraşdırma + push bildirişləri)
 
 const LINKS = [
   { to: '/', label: 'İdarəetmə', icon: LuLayoutDashboard, end: true, admin: false },
+  { to: '/kassa', label: 'Kassa', icon: LuWallet, admin: true },
   { to: '/odenisler', label: 'Ödənişlər', icon: LuCreditCard, admin: false },
   { to: '/problemler', label: 'Problemlər', icon: LuTriangleAlert, admin: false },
   { to: '/magazalar', label: 'Mağazalar', icon: LuStore, admin: true },
@@ -88,6 +90,7 @@ function Shell() {
       <main className="main">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/kassa" element={isAdmin ? <Cash /> : <Navigate to="/" replace />} />
           <Route path="/odenisler" element={<Payments />} />
           <Route path="/problemler" element={<Issues />} />
           <Route path="/magazalar" element={isAdmin ? <Stores /> : <Navigate to="/" replace />} />

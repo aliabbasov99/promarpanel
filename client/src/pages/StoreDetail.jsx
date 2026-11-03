@@ -5,7 +5,7 @@ import { MONTHS_AZ, currentMonth, monthLabel, formatDate, formatMoney } from '..
 import Modal from '../components/Modal';
 import BulkModal from '../components/BulkModal';
 import { ContactList } from './Stores';
-import { LuArrowLeft, LuMapPin, LuCheck, LuClock, LuTriangleAlert, LuPencil, LuCheckCheck, LuFileSpreadsheet } from 'react-icons/lu';
+import { LuArrowLeft, LuMapPin, LuCheck, LuClock, LuTriangleAlert, LuPencil, LuCheckCheck, LuFileSpreadsheet, LuHash } from 'react-icons/lu';
 import { useAuth } from '../auth';
 import { exportStoreExcel } from '../exportExcel';
 
@@ -46,6 +46,25 @@ function StoreDetailInner() {
   const [to, setTo] = useState(currentMonth());
   const [editModal, setEditModal] = useState(null);
   const [bulkModal, setBulkModal] = useState(false);
+
+  // Ayı "gecikdi" işarələmək — bu ay və sonrakılar gecikdirilmiş sayılır
+  const markLate = async (month) => {
+    try {
+      await api.markLate(id, month);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const clearLate = async () => {
+    try {
+      await api.clearLate(id);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
 
   // Server sənədindəki qiymət tarixçəsindən "YYYY-MM" ayının qiymətini tapır
   const priceOn = (store, month) => {
@@ -140,10 +159,19 @@ function StoreDetailInner() {
           <button className="btn" onClick={() => setBulkModal(true)}>
             <LuCheckCheck size={16} /> Toplu ödəniş
           </button>
+          {data.lateFrom ? (
+            <button className="btn ghost" onClick={clearLate} title="Gecikmiş işarəsini sil">
+              <LuTriangleAlert size={16} /> Gecikmiş: {monthLabel(data.lateFrom)}
+            </button>
+          ) : null}
         </div>
       </div>
 
       <div className="stat-grid">
+        <div className="stat-card secondary">
+          <div className="label"><LuHash size={13} /> Servis kodu</div>
+          <div className="value service-code">{store.serviceCode || '—'}</div>
+        </div>
         <div className="stat-card success">
           <div className="label"><LuCheck size={13} /> Ödənilmiş ay</div>
           <div className="value">{totals.paid}</div>
@@ -270,6 +298,10 @@ function StoreDetailInner() {
           storeId={id}
           onClose={() => setEditModal(null)}
           onSaved={() => { setEditModal(null); load(); }}
+          onMarkLate={async () => {
+            await markLate(editModal.month);
+            setEditModal(null);
+          }}
         />
       )}
       {bulkModal && data && (
@@ -298,7 +330,7 @@ function monthsBetween(a, b) {
   return (yb - ya) * 12 + (mb - ma);
 }
 
-function MonthPaymentModal({ cell, storeId, onClose, onSaved }) {
+function MonthPaymentModal({ cell, storeId, onClose, onSaved, onMarkLate }) {
   const [amount, setAmount] = useState(cell.payment?.amount ?? cell.price ?? '');
   const [paidAt, setPaidAt] = useState(
     cell.payment?.paidAt ? new Date(cell.payment.paidAt).toISOString().slice(0, 10) : monthEnd(cell.month)
@@ -337,6 +369,21 @@ function MonthPaymentModal({ cell, storeId, onClose, onSaved }) {
       }
     >
       {err && <div className="error-box">{err}</div>}
+
+      {/* Ödəniş yoxdursa — bu ayı "gecikdi" işarələmək */}
+      {!cell.payment && cell.status !== 'none' && (
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label>Gecikmiş işarəsi</label>
+          <div className="toolbar">
+            <button className="btn ghost sm" onClick={onMarkLate} disabled={busy}>
+              Bu ayı gecikdi işarələ
+            </button>
+            <span className="muted" style={{ fontSize: 12 }}>
+              Bu ay və sonrakı aylar gecikdirilmiş sayılır
+            </span>
+          </div>
+        </div>
+      )}
       <div className={`status-callout ${cell.status}`}>
         {cell.status === 'overdue' && 'Bu ayın ödənişi gecikmişdir.'}
         {cell.status === 'pending' && 'Bu ayın ödənişi hələ gözlənilir.'}

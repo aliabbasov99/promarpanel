@@ -11,3 +11,4 @@ export/
 mobile/android/
 mobile/ios/
 mobile/.expo/
+.vercel

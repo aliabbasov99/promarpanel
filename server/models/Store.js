@@ -12,6 +12,17 @@ const contactSchema = new mongoose.Schema(
 const storeSchema = new mongoose.Schema(
   {
     name: { type: String, required: [true, 'Mağaza adı tələb olunur'], trim: true },
+
+    // 5 simvollu unikal servis kodu (hərf + rəqəm qarışığı), avtomatik yaradılır
+    serviceCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      uppercase: true,
+      trim: true,
+      match: [/^[A-Z0-9]{5}$/, 'Servis kodu 5 simvol olmalıdır'],
+    },
+
     // Ünvan yerini Google Maps xəritə linki
     mapUrl: { type: String, trim: true, default: '' },
 
@@ -31,6 +42,10 @@ const storeSchema = new mongoose.Schema(
 
     active: { type: Boolean, default: true },
     note: { type: String, trim: true, default: '' },
+
+    // Əl ilə "gecikdi" işarələnən ilk ay ("YYYY-MM").
+    // Bu ay və ondan sonrakı bütün ödənişlərsiz aylar gecikdirilmiş sayılır.
+    lateFrom: { type: String, default: null },
   },
   { timestamps: true }
 );

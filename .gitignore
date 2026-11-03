@@ -12,3 +12,4 @@ mobile/android/
 mobile/ios/
 mobile/.expo/
 .vercel
+.env*

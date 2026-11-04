@@ -69,9 +69,14 @@ export default function Dashboard() {
       {isAdmin && cash && (
         <div className="stat-grid">
           <div className="stat-card secondary cash-balance">
-            <div className="label"><LuWallet size={13} /> Kassa qalığı</div>
-            <div className="value">{formatMoney(cash.balance)}</div>
-            <div className="label" style={{ marginTop: 6 }}>Bütün dövr üzrə</div>
+            <div className="label"><LuWallet size={13} /> Kassa 1 qalığı</div>
+            <div className="value">{formatMoney(cash.balances?.kassa1 ?? cash.balance)}</div>
+            <div className="label" style={{ marginTop: 6 }}>Servis ödənişləri</div>
+          </div>
+          <div className="stat-card secondary cash-balance">
+            <div className="label"><LuWallet size={13} /> Kassa 2 qalığı</div>
+            <div className="value">{formatMoney(cash.balances?.kassa2 ?? 0)}</div>
+            <div className="label" style={{ marginTop: 6 }}>Şirkət gəlir/xərcləri</div>
           </div>
           <div className="stat-card success">
             <div className="label"><LuArrowDownLeft size={13} /> Gələnlər</div>

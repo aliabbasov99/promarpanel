@@ -88,7 +88,7 @@ export const api = {
   deleteIssue: (id) => request(`/issues/${id}`, { method: 'DELETE' }),
 
   getStats: (month) => request(`/stats?month=${month}`),
-  getCash: (month) => request(`/cash?month=${month}`),
+  getCash: (month, register = '1') => request(`/cash?month=${month}&register=${register}`),
   addCash: (body) => request('/cash', { method: 'POST', body: JSON.stringify(body) }),
   deleteCash: (id) => request(`/cash/${id}`, { method: 'DELETE' }),
   // Serverless (Vercel) rejimdə WebSocket yoxdur — bildirişlər bu sorğu ilə gəlir

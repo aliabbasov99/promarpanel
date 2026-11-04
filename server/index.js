@@ -643,64 +643,121 @@ function monthOfDate(value) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-// Kassa: ümumi qalıq + seçilmiş ayın gəlir/xərc yazıları.
-// Mağaza ödənişləri də gəlir kimi bu siyahıya düşür (ödəniş tarixinə görə).
+// Kassa: Kassa 1 (servis ödənişləri + əlavə gəlir/xərc) və Kassa 2 (şirkət gəlir/xərcləri).
 app.get('/api/cash', requireRole('admin'), async (req, res) => {
   const month = req.query.month || currentMonth();
   if (!/^\d{4}-\d{2}$/.test(month)) {
     return res.status(400).json({ error: 'Ay formatı düzgün deyil' });
   }
 
+  const register = req.query.register === '2' ? '2' : '1';
   const { start, end } = monthBounds(month);
 
-  const [manual, payments, cashTotals, paymentTotals, paymentDates, cashMonths] = await Promise.all([
-    CashEntry.find({ month }).sort({ date: -1, createdAt: -1 }),
-    Payment.find({ paidAt: { $gte: start, $lt: end } })
-      .populate('store', 'name')
-      .sort({ paidAt: -1, createdAt: -1 }),
-    CashEntry.aggregate([{ $group: { _id: '$type', total: { $sum: '$amount' } } }]),
+  const [cashTotals, paymentTotals, cash1Months, cash2Months, paymentDates] = await Promise.all([
+    CashEntry.aggregate([
+      {
+        $group: {
+          _id: {
+            register: { $ifNull: ['$register', '1'] },
+            type: '$type',
+          },
+          total: { $sum: '$amount' },
+        },
+      },
+    ]),
     Payment.aggregate([{ $group: { _id: null, total: { $sum: '$amount' } } }]),
+    CashEntry.distinct('month', {
+      $or: [{ register: '1' }, { register: { $exists: false } }, { register: null }],
+    }),
+    CashEntry.distinct('month', { register: '2' }),
     Payment.find({}).select('paidAt').sort({ paidAt: 1 }),
-    CashEntry.distinct('month'),
   ]);
 
-  const cashIn = cashTotals.find((t) => t._id === 'in')?.total || 0;
-  const cashOut = cashTotals.find((t) => t._id === 'out')?.total || 0;
-  const paymentTotal = paymentTotals[0]?.total || 0;
-  const balance = cashIn - cashOut + paymentTotal;
+  let kassa1In = 0;
+  let kassa1Out = 0;
+  let kassa2In = 0;
+  let kassa2Out = 0;
 
-  const entries = [
-    ...manual.map((e) => ({
+  for (const g of cashTotals) {
+    const reg = String(g._id?.register || '1');
+    const typ = g._id?.type;
+    if (reg === '2') {
+      if (typ === 'in') kassa2In += g.total;
+      else if (typ === 'out') kassa2Out += g.total;
+    } else {
+      if (typ === 'in') kassa1In += g.total;
+      else if (typ === 'out') kassa1Out += g.total;
+    }
+  }
+
+  const paymentTotal = paymentTotals[0]?.total || 0;
+  const kassa1Balance = kassa1In - kassa1Out + paymentTotal;
+  const kassa2Balance = kassa2In - kassa2Out;
+  const totalBalance = kassa1Balance + kassa2Balance;
+
+  let entries = [];
+  if (register === '2') {
+    const manual = await CashEntry.find({ month, register: '2' }).sort({ date: -1, createdAt: -1 });
+    entries = manual.map((e) => ({
       id: String(e._id),
+      register: '2',
       source: 'manual',
       type: e.type,
       title: e.title,
       amount: e.amount,
       date: e.date,
       note: e.note,
-    })),
-    ...payments.map((p) => ({
-      id: String(p._id),
-      source: 'payment',
-      type: 'in',
-      title: p.store?.name ? `${p.store.name} — aylıq ödəniş` : 'Mağaza ödənişi',
-      amount: p.amount,
-      date: p.paidAt,
-      note: p.note,
-      paymentMonth: p.month,
-    })),
-  ].sort((a, b) => new Date(b.date) - new Date(a.date));
+    }));
+  } else {
+    const [manual, payments] = await Promise.all([
+      CashEntry.find({
+        month,
+        $or: [{ register: '1' }, { register: { $exists: false } }, { register: null }],
+      }).sort({ date: -1, createdAt: -1 }),
+      Payment.find({ paidAt: { $gte: start, $lt: end } })
+        .populate('store', 'name')
+        .sort({ paidAt: -1, createdAt: -1 }),
+    ]);
 
+    entries = [
+      ...manual.map((e) => ({
+        id: String(e._id),
+        register: '1',
+        source: 'manual',
+        type: e.type,
+        title: e.title,
+        amount: e.amount,
+        date: e.date,
+        note: e.note,
+      })),
+      ...payments.map((p) => ({
+        id: String(p._id),
+        register: '1',
+        source: 'payment',
+        type: 'in',
+        title: p.store?.name ? `${p.store.name} — aylıq ödəniş` : 'Mağaza ödənişi',
+        amount: p.amount,
+        date: p.paidAt,
+        note: p.note,
+        paymentMonth: p.month,
+      })),
+    ].sort((a, b) => new Date(b.date) - new Date(a.date));
+  }
+
+  const balance = register === '2' ? kassa2Balance : kassa1Balance;
   const income = entries.filter((e) => e.type === 'in').reduce((s, e) => s + e.amount, 0);
   const expense = entries.filter((e) => e.type === 'out').reduce((s, e) => s + e.amount, 0);
 
-  // Filtr üçün mövcud aylar (yazı olan aylar + ödəniş ayları + cari ay)
-  const monthSet = new Set([...cashMonths, currentMonth(), ...paymentDates.map((p) => monthOfDate(p.paidAt))]);
-  const months = Array.from(monthSet)
+  const rawMonths = register === '2'
+    ? [currentMonth(), ...cash2Months]
+    : [currentMonth(), ...cash1Months, ...paymentDates.map((p) => monthOfDate(p.paidAt))];
+
+  const months = Array.from(new Set(rawMonths))
     .filter((m) => /^\d{4}-\d{2}$/.test(m))
     .sort((a, b) => (a < b ? 1 : -1));
 
   res.json({
+    register,
     month,
     balance,
     income,
@@ -708,12 +765,17 @@ app.get('/api/cash', requireRole('admin'), async (req, res) => {
     net: income - expense,
     entries,
     months,
+    balances: {
+      kassa1: kassa1Balance,
+      kassa2: kassa2Balance,
+      total: totalBalance,
+    },
   });
 });
 
-// Əl ilə gəlir/xərc əlavə etmək
+// Əl ilə gəlir/xərc əlavə etmək (Kassa 1 və ya Kassa 2)
 app.post('/api/cash', requireRole('admin'), async (req, res) => {
-  const { type, title, amount, date, note } = req.body || {};
+  const { type, title, amount, date, note, register } = req.body || {};
 
   if (type !== 'in' && type !== 'out') {
     return res.status(400).json({ error: 'Növ düzgün deyil' });
@@ -730,7 +792,10 @@ app.post('/api/cash', requireRole('admin'), async (req, res) => {
     return res.status(400).json({ error: 'Tarix düzgün deyil' });
   }
 
+  const selectedRegister = register === '2' ? '2' : '1';
+
   const entry = await CashEntry.create({
+    register: selectedRegister,
     type,
     title: String(title).trim(),
     amount: value,

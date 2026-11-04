@@ -287,6 +287,71 @@ tbody tr:last-child td { border-bottom: none; }
 .badge.out { background: #fdecec; color: var(--danger); }
 
 /* ---------- Kassa ---------- */
+.kassa-tabs {
+  display: inline-flex;
+  background: #edf2f7;
+  padding: 4px;
+  border-radius: 10px;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+.kassa-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.kassa-tab:hover {
+  color: var(--text);
+}
+.kassa-tab.active {
+  background: #fff;
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.kassa-tab .badge-val {
+  background: rgba(5, 79, 150, 0.08);
+  color: var(--primary);
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+.kassa-tab.active .badge-val {
+  background: var(--primary);
+  color: #fff;
+}
+[data-theme='dark'] .kassa-tabs {
+  background: #101821;
+}
+[data-theme='dark'] .kassa-tab {
+  color: var(--muted);
+}
+[data-theme='dark'] .kassa-tab:hover {
+  color: #fff;
+}
+[data-theme='dark'] .kassa-tab.active {
+  background: #1b232d;
+  color: #fff;
+}
+[data-theme='dark'] .kassa-tab .badge-val {
+  background: #24303d;
+  color: #cfe0f2;
+}
+[data-theme='dark'] .kassa-tab.active .badge-val {
+  background: var(--primary);
+  color: #fff;
+}
+
 .cash-amount.in { color: var(--success); font-weight: 700; }
 .cash-amount.out { color: var(--danger); font-weight: 700; }
 .right { text-align: right; }

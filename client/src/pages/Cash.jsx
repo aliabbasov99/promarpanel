@@ -18,17 +18,18 @@ function todayInput() {
 }
 
 export default function Cash() {
+  const [register, setRegister] = useState('1'); // '1' | '2'
   const [month, setMonth] = useState(currentMonth());
   const [filter, setFilter] = useState('all');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [modal, setModal] = useState(null); // 'in' | 'out'
-  const [form, setForm] = useState({ title: '', amount: '', date: todayInput(), note: '' });
+  const [form, setForm] = useState({ title: '', amount: '', date: todayInput(), note: '', register: '1' });
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async (m) => {
+  const load = useCallback(async (m, reg) => {
     try {
-      const result = await api.getCash(m);
+      const result = await api.getCash(m, reg);
       setData(result);
       setError('');
     } catch (e) {
@@ -36,10 +37,10 @@ export default function Cash() {
     }
   }, []);
 
-  useEffect(() => { load(month); }, [month, load]);
+  useEffect(() => { load(month, register); }, [month, register, load]);
 
   // Serverless rejimdə ehtiyat yeniləmə
-  useLiveRefresh(useCallback(() => load(month), [month, load]));
+  useLiveRefresh(useCallback(() => load(month, register), [month, register, load]));
 
   // Son 18 ay — serverdən gələn aylarla birləşdirilir
   const fallbackMonths = useMemo(() => {
@@ -60,7 +61,7 @@ export default function Cash() {
   const entries = (data?.entries || []).filter((e) => filter === 'all' || e.type === filter);
 
   const openModal = (type) => {
-    setForm({ title: '', amount: '', date: todayInput(), note: '' });
+    setForm({ title: '', amount: '', date: todayInput(), note: '', register });
     setModal(type);
   };
 
@@ -70,9 +71,16 @@ export default function Cash() {
     try {
       await api.addCash({ ...form, type: modal });
       const addedMonth = form.date.slice(0, 7);
+      const targetReg = form.register || register;
       setModal(null);
-      if (addedMonth !== month) setMonth(addedMonth);
-      else await load(month);
+      if (targetReg !== register) {
+        setRegister(targetReg);
+        setMonth(addedMonth);
+      } else if (addedMonth !== month) {
+        setMonth(addedMonth);
+      } else {
+        await load(month, register);
+      }
     } catch (err) {
       alert(err.message);
     } finally {
@@ -84,7 +92,7 @@ export default function Cash() {
     if (!confirm(`"${entry.title}" yazısı silinsin?`)) return;
     try {
       await api.deleteCash(entry.id);
-      await load(month);
+      await load(month, register);
     } catch (e) {
       alert(e.message);
     }
@@ -101,7 +109,9 @@ export default function Cash() {
         <div>
           <h1>Kassa</h1>
           <div className="sub">
-            Mağaza ödənişləri avtomatik gəlirə əlavə olunur — {monthLabel(month)}
+            {register === '1'
+              ? `Kassa 1: Servis ödənişləri və əlavə əməliyyatlar — ${monthLabel(month)}`
+              : `Kassa 2: Şirkətin öz gəlir və xərcləri — ${monthLabel(month)}`}
           </div>
         </div>
         <div className="toolbar">
@@ -114,13 +124,40 @@ export default function Cash() {
         </div>
       </div>
 
+      <div className="kassa-tabs">
+        <button
+          type="button"
+          className={`kassa-tab ${register === '1' ? 'active' : ''}`}
+          onClick={() => setRegister('1')}
+        >
+          <LuWallet size={15} />
+          <span>Kassa 1</span>
+          {data?.balances?.kassa1 !== undefined && (
+            <span className="badge-val">{formatMoney(data.balances.kassa1)}</span>
+          )}
+        </button>
+        <button
+          type="button"
+          className={`kassa-tab ${register === '2' ? 'active' : ''}`}
+          onClick={() => setRegister('2')}
+        >
+          <LuWallet size={15} />
+          <span>Kassa 2</span>
+          {data?.balances?.kassa2 !== undefined && (
+            <span className="badge-val">{formatMoney(data.balances.kassa2)}</span>
+          )}
+        </button>
+      </div>
+
       {error && <div className="error-box">Xəta: {error}</div>}
 
       <div className="stat-grid">
         <div className="stat-card secondary cash-balance">
-          <div className="label"><LuWallet size={13} /> Kassa qalığı</div>
+          <div className="label"><LuWallet size={13} /> {register === '1' ? 'Kassa 1 qalığı' : 'Kassa 2 qalığı'}</div>
           <div className="value">{formatMoney(balance)}</div>
-          <div className="label" style={{ marginTop: 6 }}>Bütün dövr üzrə</div>
+          <div className="label" style={{ marginTop: 6 }}>
+            {register === '1' ? 'Servis + əl ilə yazılar' : 'Şirkət gəlir/xərcləri'}
+          </div>
         </div>
         <div className="stat-card success">
           <div className="label"><LuArrowDownLeft size={13} /> Gələnlər</div>
@@ -143,7 +180,7 @@ export default function Cash() {
 
       <section className="panel">
         <div className="panel-head">
-          <h2>Kassa tarixçəsi</h2>
+          <h2>Kassa {register} tarixçəsi</h2>
           <div className="toolbar">
             <select value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Ay">
               {months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
@@ -161,7 +198,7 @@ export default function Cash() {
         ) : entries.length === 0 ? (
           <div className="empty">
             <LuListFilter size={22} style={{ marginBottom: 8 }} />
-            <div>Bu ay üçün yazı yoxdur.</div>
+            <div>Bu ay üçün Kassa {register}-də yazı yoxdur.</div>
           </div>
         ) : (
           <div className="table-scroll">
@@ -232,6 +269,17 @@ export default function Cash() {
           }
         >
           <form id="cash-form" onSubmit={submit} className="form-grid">
+            <div className="field">
+              <label htmlFor="cash-register">Kassa</label>
+              <select
+                id="cash-register"
+                value={form.register}
+                onChange={(e) => setForm({ ...form, register: e.target.value })}
+              >
+                <option value="1">Kassa 1 (Servis ödənişləri)</option>
+                <option value="2">Kassa 2 (Şirkətin gəlir/xərcləri)</option>
+              </select>
+            </div>
             <div className="field">
               <label htmlFor="cash-title">Ad</label>
               <input

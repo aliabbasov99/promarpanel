@@ -1,10 +1,11 @@
 const mongoose = require('mongoose');
 
 // Kassa hərəkətləri — əl ilə əlavə edilən gəlir/xərc yazıları.
-// Mağaza ödənişləri burada saxlanmır: onlar Payment kolleksiyasından
-// dinamik olaraq gəlir kimi hesablanır (təkrar yazı yaranmasın).
+// register: '1' -> Kassa 1 (servis ödənişləri + əlavə gəlir/xərc)
+// register: '2' -> Kassa 2 (şirkətin öz gəlir və xərcləri)
 const cashEntrySchema = new mongoose.Schema(
   {
+    register: { type: String, enum: ['1', '2'], default: '1' },
     type: { type: String, enum: ['in', 'out'], required: true },
     title: { type: String, required: [true, 'Ad tələb olunur'], trim: true },
     amount: {
@@ -21,6 +22,6 @@ const cashEntrySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-cashEntrySchema.index({ month: 1, date: -1 });
+cashEntrySchema.index({ register: 1, month: 1, date: -1 });
 
 module.exports = mongoose.model('CashEntry', cashEntrySchema);

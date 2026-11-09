@@ -13,14 +13,13 @@ const storeSchema = new mongoose.Schema(
   {
     name: { type: String, required: [true, 'Mağaza adı tələb olunur'], trim: true },
 
-    // 5 simvollu unikal servis kodu (hərf + rəqəm qarışığı), avtomatik yaradılır
+    // 4 rəqəmli unikal servis kodu (yalnız rəqəm, 1000-9999), avtomatik yaradılır
     serviceCode: {
       type: String,
       unique: true,
       sparse: true,
-      uppercase: true,
       trim: true,
-      match: [/^[A-Z0-9]{5}$/, 'Servis kodu 5 simvol olmalıdır'],
+      match: [/^[0-9]{4}$/, 'Servis kodu 4 rəqəmli olmalıdır'],
     },
 
     // Ünvan yerini Google Maps xəritə linki

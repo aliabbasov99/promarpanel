@@ -68,32 +68,53 @@ function cleanContacts(list) {
 }
 
 // ---------- Servis kodu ----------
-// 5 simvollu, hərf + rəqəm qarışığı. Oxşar simvollar (I, O, 0, 1) çıxarılıb.
-const SERVICE_CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-const SERVICE_CODE_DIGITS = '23456789';
-
+// Yalnız rəqəmlərdən ibarət 4 rəqəmli unikal nömrə (1000-9999) — yaddaşda saxlamaq asandır.
 function randomServiceCode() {
-  const all = SERVICE_CODE_LETTERS + SERVICE_CODE_DIGITS;
-  const chars = [
-    SERVICE_CODE_LETTERS[crypto.randomInt(SERVICE_CODE_LETTERS.length)],
-    SERVICE_CODE_DIGITS[crypto.randomInt(SERVICE_CODE_DIGITS.length)],
-  ];
-  for (let i = 0; i < 3; i++) chars.push(all[crypto.randomInt(all.length)]);
-  // Qarışdır ki, hərf/rəqəm həmişə eyni yerdə olmasın
-  for (let i = chars.length - 1; i > 0; i--) {
-    const j = crypto.randomInt(i + 1);
-    [chars[i], chars[j]] = [chars[j], chars[i]];
-  }
-  return chars.join('');
+  return String(crypto.randomInt(1000, 10000));
 }
 
 async function generateServiceCode() {
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 50; i++) {
     const code = randomServiceCode();
     const exists = await Store.exists({ serviceCode: code });
     if (!exists) return code;
   }
   throw new Error('Unikal servis kodu yaradıla bilmədi');
+}
+
+// Köhnə formatdakı (hərflı / 5 rəqəmli) kodları 4 rəqəmliyə çevirir.
+// Həm lokal, həm production (Vercel) mühitində server açılışında işləyir.
+async function migrateServiceCodes() {
+  const stores = await Store.find({}).select('serviceCode');
+  const used = new Set();
+  const updates = [];
+  for (const s of stores) {
+    const cur = s.serviceCode || '';
+    if (/^[0-9]{4}$/.test(cur)) {
+      used.add(cur);
+      continue;
+    }
+    let code = null;
+    for (let i = 0; i < 50; i++) {
+      const cand = randomServiceCode();
+      if (!used.has(cand)) {
+        code = cand;
+        break;
+      }
+    }
+    if (!code) continue; // toqquşma — növbəti açılışda yenidən cəhd olunur
+    used.add(code);
+    updates.push({ _id: s._id, code });
+  }
+  for (const u of updates) {
+    try {
+      // unikal index toqquşarsa server həmin sənədi atlayacaq
+      await Store.updateOne({ _id: u._id, serviceCode: { $ne: u.code } }, { $set: { serviceCode: u.code } });
+      console.log(`Servis kodu 4 rəqəmliyə çevrildi -> ${u.code}`);
+    } catch {
+      /* növbəti açılışda yenidən cəhd olunacaq */
+    }
+  }
 }
 
 // Köhnə mağazalarda kod yoxdursa yaradıb yadda saxlayır
@@ -1143,6 +1164,9 @@ const PORT = process.env.PORT || 5000;
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
+    // Köhnə servis kodlarını 4 rəqəmliyə çevir (lokal + production avtomatik)
+    migrateServiceCodes().catch((e) => console.error('Servis kodu miqrasiyası:', e.message));
+
     if (IS_SERVERLESS) {
       console.log('Serverless rejim: HTTP işləyir, WebSocket yoxdur');
       return;

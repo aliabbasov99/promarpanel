@@ -5,6 +5,7 @@ import { currentMonth, monthLabel, formatMoney } from '../utils';
 import { LuCheck, LuClock, LuTriangleAlert, LuStore, LuTriangleAlert as LuBug, LuArrowRight, LuMapPin, LuWallet, LuArrowDownLeft, LuArrowUpRight } from 'react-icons/lu';
 import { useAuth } from '../auth';
 import { useLiveRefresh } from '../useLiveRefresh';
+import LoadingBar from '../components/LoadingBar';
 
 export default function Dashboard() {
   const { isAdmin } = useAuth();
@@ -13,26 +14,33 @@ export default function Dashboard() {
   const [openIssues, setOpenIssues] = useState([]);
   const [cash, setCash] = useState(null);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   const month = currentMonth();
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [s, p, i] = await Promise.all([
-          api.getStats(month),
-          api.getPayments(month),
-          api.getIssues('?status=open'),
-        ]);
-        setStats(s);
-        setRows(p.rows);
-        setOpenIssues(i.slice(0, 6));
-        if (isAdmin) setCash(await api.getCash(month));
-      } catch (e) {
-        setError(e.message);
-      }
-    })();
+  const load = useCallback(async () => {
+    try {
+      const [s, p, i] = await Promise.all([
+        api.getStats(month),
+        api.getPayments(month),
+        api.getIssues('?status=open'),
+      ]);
+      setStats(s);
+      setRows(p.rows);
+      setOpenIssues(i.slice(0, 6));
+      if (isAdmin) setCash(await api.getCash(month));
+      setError('');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
   }, [month, isAdmin]);
+
+  useEffect(() => {
+    setLoading(true);
+    load();
+  }, [load]);
 
   // Serverless rejimdə (WebSocket yoxdur) ehtiyat yeniləmə
   useLiveRefresh(
@@ -44,8 +52,8 @@ export default function Dashboard() {
     }, [month, isAdmin])
   );
 
-  if (error) return <div className="error-box">Xəta: {error}</div>;
-  if (!stats) return <div className="loading">Yüklənir…</div>;
+  if (error && !stats) return <div className="error-box">Xəta: {error}</div>;
+  if (loading || !stats) return <LoadingBar />;
 
   const overdueRows = rows.filter((r) => r.status === 'overdue');
   const progress = isAdmin && stats.expected > 0 ? Math.round((stats.collected / stats.expected) * 100) : 0;

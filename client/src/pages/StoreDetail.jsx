@@ -7,6 +7,7 @@ import BulkModal from '../components/BulkModal';
 import { ContactList } from './Stores';
 import { LuArrowLeft, LuMapPin, LuCheck, LuClock, LuTriangleAlert, LuPencil, LuCheckCheck, LuFileSpreadsheet, LuHash } from 'react-icons/lu';
 import { useAuth } from '../auth';
+import LoadingBar from '../components/LoadingBar';
 import { exportStoreExcel } from '../exportExcel';
 
 // Cədvəl xanası üçün kompakt məbləğ (AZN ayrıca, kiçik)
@@ -129,7 +130,7 @@ function StoreDetailInner() {
   }, [data]);
 
   if (error && !data) return <div className="error-box">Xəta: {error}</div>;
-  if (!store || !data) return <div className="loading">Yüklənir…</div>;
+  if (!store || !data) return <LoadingBar />;
 
   return (
     <>
@@ -206,7 +207,7 @@ function StoreDetailInner() {
         </div>
 
         {loading ? (
-          <div className="loading">Yüklənir…</div>
+          <LoadingBar />
         ) : data.cells.length === 0 ? (
           <div className="empty">Seçilmiş tarix aralığında ay yoxdur.</div>
         ) : (

@@ -436,6 +436,27 @@ tbody tr:last-child td { border-bottom: none; }
 
 .empty { padding: 40px; text-align: center; color: var(--muted); font-size: 14px; }
 .loading { padding: 40px; text-align: center; color: var(--muted); }
+
+/* ---------- Yükləmə zolağı (məlumat gələnə qədər) ---------- */
+.loading-bar { padding: 34px 22px; }
+.loading-bar-track {
+  position: relative; height: 6px; border-radius: 999px;
+  background: #e9edf2; overflow: hidden;
+}
+.loading-bar-ind {
+  position: absolute; top: 0; bottom: 0; left: -45%; width: 45%;
+  border-radius: 999px; background: var(--primary);
+  animation: loading-slide 1.15s ease-in-out infinite;
+}
+@keyframes loading-slide {
+  0% { left: -45%; }
+  100% { left: 100%; }
+}
+.loading-bar-text {
+  margin-top: 12px; text-align: center;
+  color: var(--muted); font-size: 13px;
+}
+[data-theme='dark'] .loading-bar-track { background: #263140; }
 .error-box {
   background: #fdecec; color: var(--danger); padding: 12px 16px;
   border-radius: 8px; font-size: 13px; margin-bottom: 14px;
@@ -703,23 +724,57 @@ table.year-grid td { padding: 4px; height: 56px; vertical-align: middle; }
 
 @media (max-width: 720px) {
   .layout { flex-direction: column; align-items: stretch; }
-  /* Menyu yuxarıda deyil — ALTDA sabit, yalnız ikonlar */
+  /* Menyu yuxarıda deyil — ALTDA sabit, ikonlar və altlarında səhifə adları */
   .sidebar {
     position: fixed; left: 0; right: 0; bottom: 0; top: auto;
     width: 100%; height: auto; z-index: 40;
     flex-direction: row; padding: 0;
+    background: var(--primary);
     box-shadow: 0 -2px 14px rgba(5, 20, 40, 0.22);
   }
   .sidebar-top { display: none; }
-  .nav-list { flex-direction: row; width: 100%; }
-  .nav-link {
-    flex: 1 1 0; min-width: 0; flex-direction: column; gap: 3px;
-    padding: 9px 2px; font-size: 0; text-align: center;
+  .nav-list { flex-direction: row; width: 100%; align-items: stretch; }
+  .nav-link,
+  .layout.collapsed .nav-link {
+    flex: 1 1 0; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px;
+    padding: 6px 1px 6px;
+    text-align: center;
     border-left: none; border-bottom: none;
     border-top: 3px solid transparent;
   }
-  .nav-link.active { border-left-color: transparent; border-top-color: var(--secondary); }
-  .nav-link svg { width: 21px; height: 21px; }
+  .nav-link span,
+  .layout.collapsed .nav-link span {
+    display: block !important;
+    font-size: 9.5px;
+    line-height: 1.15;
+    font-weight: 500;
+    letter-spacing: -0.2px;
+    color: rgba(255, 255, 255, 0.82);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    padding: 0 1px;
+  }
+  .nav-link.active,
+  .layout.collapsed .nav-link.active {
+    border-left-color: transparent;
+    border-top-color: var(--secondary);
+    background: rgba(247, 194, 250, 0.12);
+  }
+  .nav-link.active span,
+  .layout.collapsed .nav-link.active span {
+    color: #fff;
+    font-weight: 700;
+  }
+  .nav-link svg,
+  .layout.collapsed .nav-link svg {
+    width: 19px;
+    height: 19px;
+    flex-shrink: 0;
+  }
 
   .main { padding: 14px 12px 86px; }
   .toast-wrap { right: 10px; left: 10px; bottom: 76px; max-width: none; }

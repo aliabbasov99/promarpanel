@@ -7,6 +7,7 @@ import { LuPlus, LuPencil, LuTrash2, LuPower, LuTags, LuMapPin, LuEye, LuEyeOff,
 import { FaWhatsapp } from 'react-icons/fa';
 import { useAuth } from '../auth';
 import { useLiveRefresh } from '../useLiveRefresh';
+import LoadingBar from '../components/LoadingBar';
 
 // Əlaqə siyahısını "Ad — nömrə" satırlarına çevirir
 export function contactRows(s) {
@@ -48,6 +49,7 @@ export function ContactList({ store, compact = false }) {
 export default function Stores() {
   const { isAdmin } = useAuth();
   const [stores, setStores] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [showInactive, setShowInactive] = useState(false);
   const [editModal, setEditModal] = useState(null);
@@ -55,17 +57,22 @@ export default function Stores() {
   const [error, setError] = useState('');
 
   const load = async () => {
+    setLoading(true);
     try {
       setStores(await api.getStores());
       setError('');
     } catch (e) {
       setError(e.message);
+    } finally {
+      setLoading(false);
     }
   };
   useEffect(() => { load(); }, []);
 
   // Serverless rejimdə ehtiyat yeniləmə
-  useLiveRefresh(load);
+  useLiveRefresh(() => {
+    api.getStores().then(setStores).catch(() => {});
+  });
 
   const visible = stores.filter((s) => {
     if (!showInactive && !s.active) return false;
@@ -108,7 +115,9 @@ export default function Stores() {
       {error && <div className="error-box">Xəta: {error}</div>}
 
       <div className="panel">
-        {visible.length === 0 ? (
+        {loading ? (
+          <LoadingBar />
+        ) : visible.length === 0 ? (
           <div className="empty">Mağaza tapılmadı.</div>
         ) : (
           <div className="table-scroll">

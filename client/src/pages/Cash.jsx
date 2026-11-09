@@ -6,6 +6,7 @@ import {
   LuArrowDownLeft, LuArrowUpRight, LuPlus, LuTrash2, LuWallet, LuListFilter,
 } from 'react-icons/lu';
 import { useLiveRefresh } from '../useLiveRefresh';
+import LoadingBar from '../components/LoadingBar';
 
 const TYPES = {
   in: { label: 'Gəlir', badge: 'in', sign: '+' },
@@ -22,25 +23,31 @@ export default function Cash() {
   const [month, setMonth] = useState(currentMonth());
   const [filter, setFilter] = useState('all');
   const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modal, setModal] = useState(null); // 'in' | 'out'
   const [form, setForm] = useState({ title: '', amount: '', date: todayInput(), note: '', register: '1' });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (m, reg) => {
+    setLoading(true);
     try {
       const result = await api.getCash(m, reg);
       setData(result);
       setError('');
     } catch (e) {
       setError(e.message);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => { load(month, register); }, [month, register, load]);
 
   // Serverless rejimdə ehtiyat yeniləmə
-  useLiveRefresh(useCallback(() => load(month, register), [month, register, load]));
+  useLiveRefresh(useCallback(() => {
+    api.getCash(month, register).then(setData).catch(() => {});
+  }, [month, register]));
 
   // Son 18 ay — serverdən gələn aylarla birləşdirilir
   const fallbackMonths = useMemo(() => {
@@ -193,8 +200,8 @@ export default function Cash() {
           </div>
         </div>
 
-        {!data ? (
-          <div className="loading">Yüklənir…</div>
+        {loading || !data ? (
+          <LoadingBar />
         ) : entries.length === 0 ? (
           <div className="empty">
             <LuListFilter size={22} style={{ marginBottom: 8 }} />

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { api } from '../api';
 import { currentMonth, monthLabel, formatDate, formatMoney } from '../utils';
 import Modal from '../components/Modal';
+import LoadingBar from '../components/LoadingBar';
 import { ContactList } from './Stores';
 import { LuCheck, LuClock, LuTriangleAlert, LuEye, LuRotateCcw, LuMapPin, LuFileSpreadsheet, LuChartColumn, LuCalendarRange } from 'react-icons/lu';
 import { exportPayments } from '../exportPayments';
@@ -20,25 +21,31 @@ export default function Payments() {
   const [month, setMonth] = useState(currentMonth());
   const [showInactive, setShowInactive] = useState(false);
   const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
   const [payModal, setPayModal] = useState(null);
 
   const load = async (m, inc) => {
+    setLoading(true);
     try {
       const data = await api.getPayments(m, inc);
       setRows(data.rows);
       setError('');
     } catch (e) {
       setError(e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => { load(month, showInactive); }, [month, showInactive]);
 
   // Serverless rejimdə (WebSocket yoxdur) ehtiyat yeniləmə
-  useLiveRefresh(useCallback(() => load(month, showInactive), [month, showInactive]));
+  useLiveRefresh(useCallback(() => {
+    api.getPayments(month, showInactive).then((d) => setRows(d.rows)).catch(() => {});
+  }, [month, showInactive]));
 
   const months = useMemo(() => {
     const now = new Date();
@@ -244,7 +251,9 @@ export default function Payments() {
           </div>
         </div>
 
-        {visible.length === 0 ? (
+        {loading ? (
+          <LoadingBar />
+        ) : visible.length === 0 ? (
           <div className="empty">Məlumat yoxdur.</div>
         ) : (
           <div className="table-scroll">

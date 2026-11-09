@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api';
 import { formatDate } from '../utils';
 import Modal from '../components/Modal';
+import LoadingBar from '../components/LoadingBar';
 import { ContactList } from './Stores';
 import { LuPlus, LuTrash2, LuSearch, LuArchive, LuUndo2 } from 'react-icons/lu';
 import { useLiveRefresh } from '../useLiveRefresh';
@@ -12,6 +13,7 @@ const PRIORITY = { high: 'Yüksək', medium: 'Orta', low: 'Aşağı' };
 export default function Issues() {
   const [view, setView] = useState('active'); // active | archive
   const [issues, setIssues] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [stores, setStores] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [storeFilter, setStoreFilter] = useState('');
@@ -20,31 +22,44 @@ export default function Issues() {
   const [error, setError] = useState('');
 
   const load = async (params) => {
+    setLoading(true);
     try {
       const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
       setIssues(await api.getIssues(qs ? `?${qs}` : ''));
       setError('');
     } catch (e) {
       setError(e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const reload = () =>
+  const reload = useCallback(() => {
     load({
       status: view === 'archive' ? 'resolved' : '',
       store: storeFilter,
       excludeResolved: view === 'active',
     });
-
-  useEffect(() => {
-    // Arxivdə yalnız həll olunmuşlar; əsas siyahıda həll olunmuşlar yoxdur
-    reload();
-    api.getStoreOptions().then(setStores).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, storeFilter]);
 
+  useEffect(() => {
+    reload();
+    api.getStoreOptions().then(setStores).catch(() => {});
+  }, [reload]);
+
   // Serverless rejimdə ehtiyat yeniləmə
-  useLiveRefresh(reload);
+  useLiveRefresh(
+    useCallback(() => {
+      const qs = new URLSearchParams(
+        Object.entries({
+          status: view === 'archive' ? 'resolved' : '',
+          store: storeFilter,
+          excludeResolved: view === 'active',
+        }).filter(([, v]) => v)
+      ).toString();
+      api.getIssues(qs ? `?${qs}` : '').then(setIssues).catch(() => {});
+    }, [view, storeFilter])
+  );
 
   const visible = issues.filter((i) =>
     !q ||
@@ -108,7 +123,9 @@ export default function Issues() {
           </div>
         </div>
 
-        {visible.length === 0 ? (
+        {loading ? (
+          <LoadingBar />
+        ) : visible.length === 0 ? (
           <div className="empty">
             {view === 'archive' ? 'Arxivdə problem yoxdur.' : 'Açıq problem yoxdur.'}
           </div>

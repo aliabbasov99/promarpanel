@@ -5,16 +5,22 @@ import { currentMonth, monthLabel, formatMoney } from '../utils';
 import { LuCheck, LuClock, LuTriangleAlert, LuStore, LuTriangleAlert as LuBug, LuArrowRight, LuMapPin, LuWallet, LuArrowDownLeft, LuArrowUpRight } from 'react-icons/lu';
 import { useAuth } from '../auth';
 import { useLiveRefresh } from '../useLiveRefresh';
-import LoadingBar from '../components/LoadingBar';
 
 export default function Dashboard() {
   const { isAdmin } = useAuth();
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState({
+    totalStores: 0,
+    paid: 0,
+    pending: 0,
+    overdue: 0,
+    collected: 0,
+    expected: 0,
+    openIssues: 0,
+  });
   const [rows, setRows] = useState([]);
   const [openIssues, setOpenIssues] = useState([]);
   const [cash, setCash] = useState(null);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
 
   const month = currentMonth();
 
@@ -32,13 +38,10 @@ export default function Dashboard() {
       setError('');
     } catch (e) {
       setError(e.message);
-    } finally {
-      setLoading(false);
     }
   }, [month, isAdmin]);
 
   useEffect(() => {
-    setLoading(true);
     load();
   }, [load]);
 
@@ -52,8 +55,7 @@ export default function Dashboard() {
     }, [month, isAdmin])
   );
 
-  if (error && !stats) return <div className="error-box">Xəta: {error}</div>;
-  if (loading || !stats) return <LoadingBar />;
+  if (error) return <div className="error-box">Xəta: {error}</div>;
 
   const overdueRows = rows.filter((r) => r.status === 'overdue');
   const progress = isAdmin && stats.expected > 0 ? Math.round((stats.collected / stats.expected) * 100) : 0;
